@@ -5,9 +5,12 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strings"
 )
 
 var Server = make(map[string]string) // {key:"IP", value: "PORT"} IP is hard coded
+
+var Client = make(map[string]string) // key:"IP", value: "PORT"} to store the current client's address
 
 var StoredVal = make(map[string]int) // {key:"obeject", value: "value"} value stored in current server
 
@@ -80,7 +83,9 @@ func handleRequest(tcpConn *net.TCPConn) {
 }
 
 func startClient(port string, name string) {
+	fmt.Println("Server: ", len(Server))
 	for ADDR := range Server {
+		fmt.Println("Current Addr: " + ADDR)
 		tcpAddr, _ := net.ResolveTCPAddr("tcp", ADDR+":"+port)
 		conn, err := net.DialTCP("tcp", nil, tcpAddr)
 		if err != nil {
@@ -91,7 +96,8 @@ func startClient(port string, name string) {
 		// go sendRequest(conn)
 
 	}
-	go doTask()
+	// go doTask()
+	doTask()
 }
 
 //to deal with the user's input and instructions
@@ -107,10 +113,20 @@ func doTask() {
 			os.Exit(0)
 		}
 
-		// msgSplit := strings.Split(msg, "")
-		fmt.Println(msg)
+		msgSplit := strings.Split(msg, " ")
+		switch msgSplit[0] {
+		case "SET":
+			// set server.key value
+		case "GET":
+			// get server.key
+		}
+		// fmt.Println(msg)
 
 	}
+}
+
+func wrapMessge(msg string) string {
+
 }
 
 //send the msg from client to serever
@@ -119,7 +135,11 @@ func doTask() {
 // }
 
 func serverCode(port string, name string) {
-	Server["172.22.158.185"] = "NULL"
+	// remote server
+	// Server["172.22.158.185"] = "NULL"
+
+	// local server
+	// Server["10.195.3.50"] = "NULL"
 	startServer(port, name)
 
 }
@@ -135,6 +155,7 @@ func main() {
 		mode := os.Args[1]
 		name := os.Args[2]
 		port := os.Args[3]
+		Server["10.195.3.50"] = "NULL"
 		if mode == "server" {
 			serverCode(port, name)
 		} else {
