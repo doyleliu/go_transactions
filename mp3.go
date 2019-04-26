@@ -111,7 +111,7 @@ func handleRequest(tcpConn *net.TCPConn) {
 			clientInstruction := recvMsg[1]
 
 			msgSplit := strings.Split(clientInstruction, " ")
-			fmt.Println(msgSplit)
+			//fmt.Println(msgSplit)
 
 			switch msgSplit[0]{
 			case "GET":
@@ -129,22 +129,26 @@ func handleRequest(tcpConn *net.TCPConn) {
 				}
 			case "SET":
 				valMutex.Lock()
+				fmt.Println("I am here")
 				//target := msgSplit[1]
 				//val := msgSplit[2]
 				//if _, ok := StoredVal[target]; ok{
 				//	StoredVal[target] = strconv.Atoi(val)
 				//}
-				SavedOp[clientName] = clientInstruction
+				//fmt.Println("recvMsg[2] :", recvMsg[2])
+				SavedOp[clientName] = recvMsg[2]
 				valMutex.Unlock()
 
 
 			case "COMMIT":
 				valMutex.Lock()
-				if instruction,ok := SavedOp[clientName]; ok{
-					msgSplit_c := strings.Split(instruction, " ")
-					target := msgSplit_c[1]
-					val := msgSplit_c[2]
+				if instruction, ok := SavedOp[clientName]; ok{
+					msgsplitC := strings.Fields(instruction)
+					//fmt.Println("msg split[0]: ", msgsplitC[0])
+					target := msgsplitC[0]
+					val := msgsplitC[1]
 					StoredVal[target], _ = strconv.Atoi(val)
+					print("Current val:", StoredVal[target])
 				}
 				valMutex.Unlock()
 
@@ -190,8 +194,11 @@ func doTask() {
 			os.Exit(0)
 		}
 
-		msgSplit := strings.Split(msg, " ")
+		msgSplit := strings.Fields(msg)
+		//fmt.Println(msgSplit)
 		switch msgSplit[0] {
+		case "BEGIN\n":
+			fmt.Println("OK")
 		case "SET":
 			// set server.key value
 			target := msgSplit[1]
@@ -202,11 +209,11 @@ func doTask() {
 			//fmt.Println("Server: ",CSConn[ServerName[dest]])
 			conn := CSConn[ServerName[dest]]
 
-			sendMsg := wrapMessage(msgSplit[0], para + ":" + val )
-			fmt.Println("sendMsg val:", sendMsg)
+			sendMsg := wrapMessage(msgSplit[0], para + " " + val )
+			//fmt.Println("sendMsg val:", sendMsg)
 			b := []byte(sendMsg)
 			//fmt.Println("b val: ", b)
-			fmt.Println("conn", conn)
+			//fmt.Println("conn", conn)
 			_, _ = conn.Write(b)
 			ClientSaveOP[target], _ = strconv.Atoi(val)
 			currentTarget = target
@@ -226,19 +233,20 @@ func doTask() {
 				b := []byte(sendMsg)
 				conn.Write(b)
 			}
-		case "OK":
+		case "COMMIT":
+			//fmt.Println("Current Target: ", currentTarget)
 			targetSplit := strings.Split(currentTarget, ".")
 			dest := targetSplit[0]
 			conn := CSConn[ServerName[dest]]
-			sendMsg := "OK"
+			sendMsg := wrapMessage(msgSplit[0], currentTarget)
 			b := []byte(sendMsg)
 			conn.Write(b)
 
-		case "ABORTED":
+		case "ABORT":
 			targetSplit := strings.Split(currentTarget, ".")
 			dest := targetSplit[0]
 			conn := CSConn[ServerName[dest]]
-			sendMsg := "Aborted"
+			sendMsg := "ABORT"
 			b := []byte(sendMsg)
 			conn.Write(b)
 
@@ -259,12 +267,16 @@ func wrapMessage(op string, msg string) string {
 
 func dewrapMessage(msg string) []string{
 	msgSplit := strings.Split(msg, ":")
+	//fmt.Println("Current splited message", msgSplit)
 	var result []string
 	result = make([]string, 3)
 	result[0] = msgSplit[0]
 	result[1] = msgSplit[1]
-	result[2] = msgSplit[2]
-	return  result
+	if len(msgSplit) > 2 {
+		result[2] = msgSplit[2]
+	}
+
+	return result
 
 }
 
@@ -286,10 +298,10 @@ func serverCode(port string, name string) {
 
 func main() {
 	if len(os.Args) < 3 {
-		fmt.Println("Usage: ./mp3 server/client name port")
+		fmt.Println("Usage: ./mp3 coordinator/server/client name port")
 		return
 	} else if len(os.Args) > 4 {
-		fmt.Println("Usage: ./mp3 server/client name port")
+		fmt.Println("Usage: ./mp3 coordinator/server/client name port")
 		return
 	} else {
 		mode := os.Args[1]
