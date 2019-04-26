@@ -58,6 +58,38 @@ func getIPAddr() []string {
 	return res
 }
 
+// start the Coordinator
+func startCoordinator(port string, name string){
+	myAddr := getIPAddr()
+	index := setPort(myAddr, port)
+
+	if index == "NULL" {
+		fmt.Println(myAddr)
+		fmt.Println("Cannot find address!")
+		return
+	}
+	tcpAddr, _ := net.ResolveTCPAddr("tcp", index+":"+port)
+	tcpListener, _ := net.ListenTCP("tcp", tcpAddr)
+	for {
+		tcpConn, err := tcpListener.AcceptTCP()
+		defer tcpConn.Close()
+		if err != nil {
+			fmt.Println(err.Error())
+			os.Exit(0)
+		}
+		strRemoteAddr := tcpConn.RemoteAddr().String()
+		fmt.Println("connecting with: " + strRemoteAddr)
+		go handleRequest(tcpConn)
+
+	}
+
+
+}
+
+func checkDeadlock(){
+
+}
+
 // start the server
 func startServer(port string, name string) {
 	myAddr := getIPAddr()
@@ -115,7 +147,8 @@ func handleRequest(tcpConn *net.TCPConn) {
 
 			switch msgSplit[0]{
 			case "GET":
-				target := msgSplit[1] //
+
+				target := recvMsg[2] //
 				if val, ok := StoredVal[target]; ok {
 					//return the search results
 					retMsg := wrapMessage(msgSplit[0], strconv.Itoa(val))
@@ -136,24 +169,45 @@ func handleRequest(tcpConn *net.TCPConn) {
 				//	StoredVal[target] = strconv.Atoi(val)
 				//}
 				//fmt.Println("recvMsg[2] :", recvMsg[2])
-				SavedOp[clientName] = recvMsg[2]
+				//fmt.Println("recvMsg[2] Length :", len(recvMsg[2]))
+				SavedOp[clientName] += recvMsg[2] + "+"
 				valMutex.Unlock()
 
 
 			case "COMMIT":
 				valMutex.Lock()
-				if instruction, ok := SavedOp[clientName]; ok{
-					msgsplitC := strings.Fields(instruction)
-					//fmt.Println("msg split[0]: ", msgsplitC[0])
-					target := msgsplitC[0]
-					val := msgsplitC[1]
-					StoredVal[target], _ = strconv.Atoi(val)
-					print("Current val:", StoredVal[target])
+				fmt.Println("savedop length", len(SavedOp[clientName]))
+				if _, ok := SavedOp[clientName]; ok{
+
+					instructionSplit := strings.Split(SavedOp[clientName], "+")
+					for index := range instructionSplit{
+						msgsplitC := strings.Fields(instructionSplit[index])
+						if len(msgsplitC) > 1{
+							target := msgsplitC[0]
+							val := msgsplitC[1]
+							StoredVal[target], _ = strconv.Atoi(val)
+							print("Current val:", StoredVal[target])
+
+						}
+					}
+					b := []byte("COMMIT OK!")
+					tcpConn.Write(b)
+
+					//msgsplitC := strings.Fields(instruction)
+					////fmt.Println("msg split[0]: ", msgsplitC[0])
+					//target := msgsplitC[0]
+					//val := msgsplitC[1]
+					//StoredVal[target], _ = strconv.Atoi(val)
+					//print("Current val:", StoredVal[target])
+					//b := []byte("COMMIT OK!")
+					//tcpConn.Write(b)
 				}
 				valMutex.Unlock()
 
 			case "ABORT":
 				delete(SavedOp, clientName)
+				b := []byte("ABORTED!")
+				tcpConn.Write(b)
 
 			}
 		}
@@ -171,13 +225,30 @@ func startClient(port string, name string) {
 			os.Exit(0)
 		}
 		CSConn[ADDR] = conn
-		// go sendRequest(conn)
+		go handleFeedback(conn)
 
 	}
 	fmt.Println("CsConn: ", CSConn)
 	// go doTask()
 	doTask()
 
+}
+
+func handleFeedback(tcpConn *net.TCPConn){
+	buff := make([]byte, 128)
+	for{
+		j, err := tcpConn.Read(buff)
+		if err != nil && err.Error() != "EOF" {
+			fmt.Println("Wrong to read the buffer ! ", err)
+			ch <- 1
+			break
+
+		}
+		if err == nil{
+			recvMsg := string(buff[0:j])
+			fmt.Println(recvMsg)
+		}
+	}
 }
 
 //to deal with the user's input and instructions
@@ -232,6 +303,7 @@ func doTask() {
 				sendMsg := wrapMessage(msgSplit[0], para )
 				b := []byte(sendMsg)
 				conn.Write(b)
+
 			}
 		case "COMMIT":
 			//fmt.Println("Current Target: ", currentTarget)
@@ -241,6 +313,11 @@ func doTask() {
 			sendMsg := wrapMessage(msgSplit[0], currentTarget)
 			b := []byte(sendMsg)
 			conn.Write(b)
+
+			//problems may happen here! To clear the temporary number
+			for k := range ClientSaveOP {
+				delete(ClientSaveOP, k)
+			}
 
 		case "ABORT":
 			targetSplit := strings.Split(currentTarget, ".")
