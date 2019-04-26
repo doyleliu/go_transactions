@@ -5,18 +5,26 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 )
 
 var ch = make(chan int)
 
 var Server = make(map[string]string) // {key:"IP", value: "PORT"} IP is hard coded
 
+var ServerName = make(map[string]string) //{key: "Name", value: "IP"}
+
 var Client = make(map[string]string) // key:"IP", value: "PORT"} to store the current client's address
 
 var StoredVal = make(map[string]int) // {key:"obeject", value: "value"} value stored in current server
 
+var SavedOp = make(map[string]string) // {key:"obeject", value: "value"} Uncommited transactions in current server
+
 var CSConn = make(map[string]*net.TCPConn) // current client and server connection
+
+var valMutex = sync.RWMutex{} //to lock the value when check and write
 
 func setPort(addr []string, port string) string {
 	for a := range addr {
@@ -97,8 +105,45 @@ func handleRequest(tcpConn *net.TCPConn) {
 			clientInstruction := recvMsg[1]
 
 			msgSplit := strings.Split(clientInstruction, " ")
+			fmt.Println(msgSplit)
 
-			if msgSplit[0] == "GET"{
+			switch msgSplit[0]{
+			case "GET":
+				target := msgSplit[1] //
+				if val, ok := StoredVal[target]; ok {
+					//return the search results
+					retMsg := wrapMessge(strconv.Itoa(val))
+					b := []byte(retMsg)
+					tcpConn.Write(b)
+
+				}else{
+					retMsg := wrapMessge("NOT FOUND")
+					b := []byte(retMsg)
+					tcpConn.Write(b)
+				}
+			case "SET":
+				valMutex.Lock()
+				//target := msgSplit[1]
+				//val := msgSplit[2]
+				//if _, ok := StoredVal[target]; ok{
+				//	StoredVal[target] = strconv.Atoi(val)
+				//}
+				SavedOp[clientName] = clientInstruction
+				valMutex.Unlock()
+
+
+			case "COMMIT":
+				valMutex.Lock()
+				if instruction,ok := SavedOp[clientName]; ok{
+					msgSplit_c := strings.Split(instruction, " ")
+					target := msgSplit_c[1]
+					val := msgSplit_c[2]
+					StoredVal[target] = strconv.Atoi(val)
+				}
+				valMutex.Unlock()
+
+			case "ABORT":
+				delete(SavedOp, clientName);
 
 			}
 		}
@@ -150,7 +195,7 @@ func doTask() {
 
 // to change the input message to the version that can be processed
 func wrapMessge(msg string) string {
-
+	//msg (From) GET/SET/COMMIT/ABORT A.x (val)
 }
 
 func dewrapMessage(msg string) string[]{
@@ -185,6 +230,7 @@ func main() {
 		name := os.Args[2]
 		port := os.Args[3]
 		Server["10.195.3.50"] = "NULL"
+		ServerName["A"] = "10.195.3.50"
 		if mode == "server" {
 			serverCode(port, name)
 		} else {
