@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+var ch = make(chan int)
+
 var Server = make(map[string]string) // {key:"IP", value: "PORT"} IP is hard coded
 
 var Client = make(map[string]string) // key:"IP", value: "PORT"} to store the current client's address
@@ -79,7 +81,28 @@ func startServer(port string, name string) {
 
 // handle the request from the client
 func handleRequest(tcpConn *net.TCPConn) {
+	buff := make([]byte, 128)
+	for{
+		j, err := tcpConn.Read(buff)
+		if err != nil && err.Error() != "EOF" {
+			fmt.Println("Wrong to read the buffer ! ", err)
+			ch <- 1
+			break
 
+		}
+
+		if err == nil{
+			recvMsg := dewrapMessage(string(buff[0:j]))
+			clientName := recvMsg[0]
+			clientInstruction := recvMsg[1]
+
+			msgSplit := strings.Split(clientInstruction, " ")
+
+			if msgSplit[0] == "GET"{
+
+			}
+		}
+	}
 }
 
 func startClient(port string, name string) {
@@ -125,9 +148,15 @@ func doTask() {
 	}
 }
 
+// to change the input message to the version that can be processed
 func wrapMessge(msg string) string {
 
 }
+
+func dewrapMessage(msg string) string[]{
+
+}
+
 
 //send the msg from client to serever
 // func sendRequest(tcpConn *net.TCPConn) {
