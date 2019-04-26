@@ -22,6 +22,8 @@ var StoredVal = make(map[string]int) // {key:"obeject", value: "value"} value st
 
 var SavedOp = make(map[string]string) // {key:"obeject", value: "value"} Uncommited transactions in current server
 
+var ClientSaveOP = make(map[string]int) //{key:"A.x", value: "value"} Uncommited
+
 var CSConn = make(map[string]*net.TCPConn) // current client and server connection
 
 var valMutex = sync.RWMutex{} //to lock the value when check and write
@@ -101,6 +103,8 @@ func handleRequest(tcpConn *net.TCPConn) {
 
 		if err == nil{
 			recvMsg := dewrapMessage(string(buff[0:j]))
+			// show the current received message
+			fmt.Println(recvMsg)
 			clientName := recvMsg[0]
 			clientInstruction := recvMsg[1]
 
@@ -112,12 +116,12 @@ func handleRequest(tcpConn *net.TCPConn) {
 				target := msgSplit[1] //
 				if val, ok := StoredVal[target]; ok {
 					//return the search results
-					retMsg := wrapMessge(strconv.Itoa(val))
+					retMsg := wrapMessage(strconv.Itoa(val))
 					b := []byte(retMsg)
 					tcpConn.Write(b)
 
 				}else{
-					retMsg := wrapMessge("NOT FOUND")
+					retMsg := wrapMessage("NOT FOUND")
 					b := []byte(retMsg)
 					tcpConn.Write(b)
 				}
@@ -170,6 +174,7 @@ func startClient(port string, name string) {
 
 //to deal with the user's input and instructions
 func doTask() {
+	var currentTarget // The target of last set
 	for {
 		var msg string
 
@@ -185,8 +190,50 @@ func doTask() {
 		switch msgSplit[0] {
 		case "SET":
 			// set server.key value
+			target := msgSplit[1]
+			targetSplit := strings.Split(target, ".")
+			dest := targetSplit[0]
+			para := targetSplit[1]
+			val := msgSplit[2]
+			conn := CSConn[Server[ServerName[dest]]]
+
+			sendMsg := wrapMessage(msgSplit[0], para + ":" + val )
+			b := []byte(sendMsg)
+			conn.Write(b)
+			ClientSaveOP[target], _ = strconv.Atoi(val)
+			currentTarget = target
+
 		case "GET":
 			// get server.key
+			target := msgSplit[1]
+			if val, ok := ClientSaveOP[target]; ok{
+				fmt.Println(target + " = " + strconv.Itoa(val))
+			}else {
+				targetSplit := strings.Split(target, ".")
+				dest := targetSplit[0]
+				para := targetSplit[1]
+				conn := CSConn[Server[ServerName[dest]]]
+
+				sendMsg := wrapMessage(msgSplit[0], para )
+				b := []byte(sendMsg)
+				conn.Write(b)
+			}
+		case "OK":
+			targetSplit := strings.Split(currentTarget, ".")
+			dest := targetSplit[0]
+			conn := CSConn[Server[ServerName[dest]]]
+			sendMsg := "OK"
+			b := []byte(sendMsg)
+			conn.Write(b)
+
+		case "ABORTED":
+			targetSplit := strings.Split(currentTarget, ".")
+			dest := targetSplit[0]
+			conn := CSConn[Server[ServerName[dest]]]
+			sendMsg := "Aborted"
+			b := []byte(sendMsg)
+			conn.Write(b)
+
 		}
 		// fmt.Println(msg)
 
@@ -194,11 +241,15 @@ func doTask() {
 }
 
 // to change the input message to the version that can be processed
-func wrapMessge(msg string) string {
+func wrapMessage(op string, msg string) string {
 	//msg (From) GET/SET/COMMIT/ABORT A.x (val)
+	myAddr := getIPAddr()
+	retMsg :=  myAddr[0] + ":" + op + ":" + msg
+	return retMsg
 }
 
-func dewrapMessage(msg string) string[]{
+func dewrapMessage(msg string) []string{
+	msgSplit := strings.Split(msg, ":")
 
 }
 
