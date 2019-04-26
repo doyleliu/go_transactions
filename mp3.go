@@ -28,6 +28,7 @@ var CSConn = make(map[string]*net.TCPConn) // current client and server connecti
 
 var valMutex = sync.RWMutex{} //to lock the value when check and write
 
+
 func setPort(addr []string, port string) string {
 	for a := range addr {
 		for s := range Server {
@@ -42,12 +43,12 @@ func setPort(addr []string, port string) string {
 
 func getIPAddr() []string {
 	var res []string
-	addrs, err := net.InterfaceAddrs()
+	adds, err := net.InterfaceAddrs()
 	if err != nil {
 		os.Stderr.WriteString("Oops:" + err.Error())
 		os.Exit(1)
 	}
-	for _, a := range addrs {
+	for _, a := range adds {
 		if ipnet, ok := a.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
 			if ipnet.IP.To4() != nil {
 				res = append(res, ipnet.IP.String())
@@ -83,7 +84,7 @@ func startServer(port string, name string) {
 		}
 		strRemoteAddr := tcpConn.RemoteAddr().String()
 		fmt.Println("connecting with: " + strRemoteAddr)
-		// go handleRequest
+		go handleRequest(tcpConn)
 
 	}
 
@@ -100,6 +101,7 @@ func handleRequest(tcpConn *net.TCPConn) {
 			break
 
 		}
+		//fmt.Println("I am here")
 
 		if err == nil{
 			recvMsg := dewrapMessage(string(buff[0:j]))
@@ -116,12 +118,12 @@ func handleRequest(tcpConn *net.TCPConn) {
 				target := msgSplit[1] //
 				if val, ok := StoredVal[target]; ok {
 					//return the search results
-					retMsg := wrapMessage(strconv.Itoa(val))
+					retMsg := wrapMessage(msgSplit[0], strconv.Itoa(val))
 					b := []byte(retMsg)
 					tcpConn.Write(b)
 
 				}else{
-					retMsg := wrapMessage("NOT FOUND")
+					retMsg := wrapMessage(msgSplit[0], "NOT FOUND")
 					b := []byte(retMsg)
 					tcpConn.Write(b)
 				}
@@ -142,12 +144,12 @@ func handleRequest(tcpConn *net.TCPConn) {
 					msgSplit_c := strings.Split(instruction, " ")
 					target := msgSplit_c[1]
 					val := msgSplit_c[2]
-					StoredVal[target] = strconv.Atoi(val)
+					StoredVal[target], _ = strconv.Atoi(val)
 				}
 				valMutex.Unlock()
 
 			case "ABORT":
-				delete(SavedOp, clientName);
+				delete(SavedOp, clientName)
 
 			}
 		}
@@ -168,13 +170,15 @@ func startClient(port string, name string) {
 		// go sendRequest(conn)
 
 	}
+	fmt.Println("CsConn: ", CSConn)
 	// go doTask()
 	doTask()
+
 }
 
 //to deal with the user's input and instructions
 func doTask() {
-	var currentTarget // The target of last set
+	var currentTarget = ""// The target of last set
 	for {
 		var msg string
 
@@ -195,11 +199,15 @@ func doTask() {
 			dest := targetSplit[0]
 			para := targetSplit[1]
 			val := msgSplit[2]
-			conn := CSConn[Server[ServerName[dest]]]
+			//fmt.Println("Server: ",CSConn[ServerName[dest]])
+			conn := CSConn[ServerName[dest]]
 
 			sendMsg := wrapMessage(msgSplit[0], para + ":" + val )
+			fmt.Println("sendMsg val:", sendMsg)
 			b := []byte(sendMsg)
-			conn.Write(b)
+			//fmt.Println("b val: ", b)
+			fmt.Println("conn", conn)
+			_, _ = conn.Write(b)
 			ClientSaveOP[target], _ = strconv.Atoi(val)
 			currentTarget = target
 
@@ -212,7 +220,7 @@ func doTask() {
 				targetSplit := strings.Split(target, ".")
 				dest := targetSplit[0]
 				para := targetSplit[1]
-				conn := CSConn[Server[ServerName[dest]]]
+				conn := CSConn[ServerName[dest]]
 
 				sendMsg := wrapMessage(msgSplit[0], para )
 				b := []byte(sendMsg)
@@ -221,7 +229,7 @@ func doTask() {
 		case "OK":
 			targetSplit := strings.Split(currentTarget, ".")
 			dest := targetSplit[0]
-			conn := CSConn[Server[ServerName[dest]]]
+			conn := CSConn[ServerName[dest]]
 			sendMsg := "OK"
 			b := []byte(sendMsg)
 			conn.Write(b)
@@ -229,7 +237,7 @@ func doTask() {
 		case "ABORTED":
 			targetSplit := strings.Split(currentTarget, ".")
 			dest := targetSplit[0]
-			conn := CSConn[Server[ServerName[dest]]]
+			conn := CSConn[ServerName[dest]]
 			sendMsg := "Aborted"
 			b := []byte(sendMsg)
 			conn.Write(b)
@@ -239,6 +247,7 @@ func doTask() {
 
 	}
 }
+
 
 // to change the input message to the version that can be processed
 func wrapMessage(op string, msg string) string {
@@ -250,6 +259,12 @@ func wrapMessage(op string, msg string) string {
 
 func dewrapMessage(msg string) []string{
 	msgSplit := strings.Split(msg, ":")
+	var result []string
+	result = make([]string, 3)
+	result[0] = msgSplit[0]
+	result[1] = msgSplit[1]
+	result[2] = msgSplit[2]
+	return  result
 
 }
 
@@ -271,10 +286,10 @@ func serverCode(port string, name string) {
 
 func main() {
 	if len(os.Args) < 3 {
-		fmt.Println("Usage: ./mp1 server/client name port")
+		fmt.Println("Usage: ./mp3 server/client name port")
 		return
 	} else if len(os.Args) > 4 {
-		fmt.Println("Usage: ./mp1 server/client name port")
+		fmt.Println("Usage: ./mp3 server/client name port")
 		return
 	} else {
 		mode := os.Args[1]
