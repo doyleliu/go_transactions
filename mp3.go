@@ -61,32 +61,32 @@ func getIPAddr() []string {
 }
 
 // start the Coordinator
-func startCoordinator(port string, name string){
-	myAddr := getIPAddr()
-	index := setPort(myAddr, port)
-
-	if index == "NULL" {
-		fmt.Println(myAddr)
-		fmt.Println("Cannot find address!")
-		return
-	}
-	tcpAddr, _ := net.ResolveTCPAddr("tcp", index+":"+port)
-	tcpListener, _ := net.ListenTCP("tcp", tcpAddr)
-	for {
-		tcpConn, err := tcpListener.AcceptTCP()
-		defer tcpConn.Close()
-		if err != nil {
-			fmt.Println(err.Error())
-			os.Exit(0)
-		}
-		strRemoteAddr := tcpConn.RemoteAddr().String()
-		fmt.Println("connecting with: " + strRemoteAddr)
-		go handleRequest(tcpConn)
-
-	}
-
-
-}
+//func startCoordinator(port string, name string){
+//	myAddr := getIPAddr()
+//	index := setPort(myAddr, port)
+//
+//	if index == "NULL" {
+//		fmt.Println(myAddr)
+//		fmt.Println("Cannot find address!")
+//		return
+//	}
+//	tcpAddr, _ := net.ResolveTCPAddr("tcp", index+":"+port)
+//	tcpListener, _ := net.ListenTCP("tcp", tcpAddr)
+//	for {
+//		tcpConn, err := tcpListener.AcceptTCP()
+//		defer tcpConn.Close()
+//		if err != nil {
+//			fmt.Println(err.Error())
+//			os.Exit(0)
+//		}
+//		strRemoteAddr := tcpConn.RemoteAddr().String()
+//		fmt.Println("connecting with: " + strRemoteAddr)
+//		go handleRequest(tcpConn)
+//
+//	}
+//
+//
+//}
 
 func checkDeadlock(){
 
@@ -120,15 +120,15 @@ func startServer(port string, name string) {
 		fmt.Println("connecting with: " + strRemoteAddr)
 
 		// start to handle request together with uncommited operation map
-		var SavedOp := make(map[string]string)
-		go handleRequest(tcpConn)
+		var SavedOp = make(map[string]string)
+		go handleRequest(tcpConn, SavedOp)
 
 	}
 
 }
 
 // handle the request from the client
-func handleRequest(tcpConn *net.TCPConn) {
+func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string) {
 	buff := make([]byte, 128)
 	for{
 		j, err := tcpConn.Read(buff)
@@ -328,7 +328,8 @@ func doTask() {
 			targetSplit := strings.Split(currentTarget, ".")
 			dest := targetSplit[0]
 			conn := CSConn[ServerName[dest]]
-			sendMsg := "ABORT"
+			sendMsg := wrapMessage(msgSplit[0], currentTarget)
+			//sendMsg := "ABORT"
 			b := []byte(sendMsg)
 			conn.Write(b)
 
@@ -389,8 +390,8 @@ func main() {
 		mode := os.Args[1]
 		name := os.Args[2]
 		port := os.Args[3]
-		Server["10.195.3.50"] = "NULL"
-		ServerName["A"] = "10.195.3.50"
+		Server["192.168.1.6"] = "NULL"
+		ServerName["A"] = "192.168.1.6"
 		if mode == "server" {
 			serverCode(port, name)
 		} else {

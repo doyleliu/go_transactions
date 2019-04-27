@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="07ed8a93-18bc-407c-8220-b24375fe9717" name="Default Changelist" comment="">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/mp3.go" beforeDir="false" afterPath="$PROJECT_DIR$/mp3.go" afterDir="false" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
@@ -15,8 +16,8 @@
       <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/mp3.go">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="495">
-              <caret line="122" column="12" selection-start-line="122" selection-start-column="12" selection-end-line="122" selection-end-column="12" />
+            <state relative-caret-position="1755">
+              <caret line="260" column="21" selection-start-line="260" selection-start-column="8" selection-end-line="260" selection-end-column="21" />
               <folding>
                 <element signature="e#14#64#0" expanded="true" />
               </folding>
@@ -130,8 +131,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/mp3.go">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="495">
-          <caret line="122" column="12" selection-start-line="122" selection-start-column="12" selection-end-line="122" selection-end-column="12" />
+        <state relative-caret-position="1755">
+          <caret line="260" column="21" selection-start-line="260" selection-start-column="8" selection-end-line="260" selection-end-column="21" />
           <folding>
             <element signature="e#14#64#0" expanded="true" />
           </folding>
