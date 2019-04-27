@@ -28,9 +28,13 @@ var ClientSaveOP = make(map[string]int) //{key:"A.x", value: "value"} Uncommited
 
 var CSConn = make(map[string]*net.TCPConn) // current client and server connection
 
+var CommitMap = make(map[string]int) // store the current unresponsive server
+
 var valMutex = sync.RWMutex{} //to lock the value when check and write
 
 var ClientState = 0 // The client state {0: Not in a transaction, 1: in the uncommited transaction, wait for commit or abort}
+
+var TargetQ []string // The queue that stores the destination of each set operation
 
 
 func setPort(addr []string, port string) string {
@@ -84,7 +88,7 @@ func startCoordinator(port string, name string){
 		strRemoteAddr := tcpConn.RemoteAddr().String()
 		fmt.Println("connecting with: " + strRemoteAddr)
 		var SavedOp = make(map[string]string)
-		go handleRequest(tcpConn, SavedOp)
+		go handleRequest(tcpConn, SavedOp, port, name)
 
 	}
 
@@ -125,14 +129,14 @@ func startServer(port string, name string) {
 
 		// start to handle request together with uncommited operation map
 		var SavedOp = make(map[string]string)
-		go handleRequest(tcpConn, SavedOp)
+		go handleRequest(tcpConn, SavedOp, port, name)
 
 	}
 
 }
 
 // handle the request from the client
-func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string) {
+func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string, name string) {
 	buff := make([]byte, 128)
 	for{
 		j, err := tcpConn.Read(buff)
@@ -160,12 +164,12 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string) {
 				target := recvMsg[2] //
 				if val, ok := StoredVal[target]; ok {
 					//return the search results
-					retMsg := wrapMessage(msgSplit[0], strconv.Itoa(val))
+					retMsg := wrapMessage(msgSplit[0], strconv.Itoa(val) + ":" + name + "." + target)
 					b := []byte(retMsg)
 					tcpConn.Write(b)
 
 				}else{
-					retMsg := wrapMessage(msgSplit[0], "NOT FOUND")
+					retMsg := wrapMessage(msgSplit[0], "NOT FOUND" + ":" + name + "." + target)
 					b := []byte(retMsg)
 					tcpConn.Write(b)
 				}
@@ -199,7 +203,7 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string) {
 
 						}
 					}
-					b := []byte("COMMIT OK!")
+					b := []byte("COMMIT OK!" + ":" + name)
 					tcpConn.Write(b)
 
 					//msgsplitC := strings.Fields(instruction)
@@ -215,7 +219,7 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string) {
 
 			case "ABORT":
 				delete(SavedOp, clientName)
-				b := []byte("ABORTED!")
+				b := []byte("ABORTED!"+ ":" + name)
 				tcpConn.Write(b)
 
 			}
@@ -259,7 +263,24 @@ func handleFeedback(tcpConn *net.TCPConn){
 		}
 		if err == nil{
 			recvMsg := string(buff[0:j])
-			fmt.Println(recvMsg)
+			//fmt.Println(recvMsg)
+			msgSplit := strings.Split(recvMsg, ":")
+			if len(msgSplit) > 1 && msgSplit[1] == "GET"{
+				port := msgSplit[3]
+				value := msgSplit[2]
+				if value == "NOT FOUND" {
+					fmt.Println(value)
+				}else{
+					fmt.Println(port + " = " + value)
+				}
+			}else{
+				delete(CommitMap, msgSplit[1])
+				if len(CommitMap) <= 0 {
+					fmt.Println(msgSplit[0])
+				}
+
+			}
+
 		}
 	}
 }
@@ -267,7 +288,7 @@ func handleFeedback(tcpConn *net.TCPConn){
 //to deal with the user's input and instructions
 func doTask() {
 	//var currentTarget = ""// The target of last set
-	var TargetQ []string
+
 	for {
 		var msg string
 
@@ -316,6 +337,8 @@ func doTask() {
 			ClientSaveOP[target], _ = strconv.Atoi(val)
 			//currentTarget = target
 			TargetQ = append(TargetQ, target)
+			//fmt.Println("target", target)
+			CommitMap[dest] = 1
 
 		case "GET":
 			// get server.key
@@ -373,6 +396,7 @@ func doTask() {
 			for k := range ClientSaveOP {
 				delete(ClientSaveOP, k)
 			}
+
 			ClientState = 0
 
 		}
@@ -432,13 +456,26 @@ func main() {
 		mode := os.Args[1]
 		name := os.Args[2]
 		port := os.Args[3]
-		//Server["192.168.1.6"] = "NULL"
-		//ServerName["A"] = "192.168.1.6"
 
-		Server["10.195.3.50" + ":" + "9000"] = "NULL"
-		Server["10.195.3.50" + ":" + "9090"] = "NULL"
-		ServerName["A"] = "10.195.3.50:9000"
-		ServerName["B"] = "10.195.3.50:9090"
+		// hard-coded server address
+		AAddr := "10.195.3.50"
+		APort := "9000"
+		BAddr := "10.195.3.50"
+		BPort := "9090"
+		//CAddr := "10.195.3.50"
+		//CPort := "9100"
+		//DAddr := "10.195.3.50"
+		//DPort := "9190"
+		//EAddr := "10.195.3.50"
+		//EPort := "9200"
+		//CoordAddr := "10.195.3.50"
+		//CoordPort := "9290"
+
+
+		Server[AAddr + ":" + APort] = "NULL"
+		Server[BAddr + ":" + BPort] = "NULL"
+		ServerName["A"] = AAddr + ":" + APort
+		ServerName["B"] = BAddr + ":" + BPort
 		if mode == "server" {
 			serverCode(port, name)
 		} else {
