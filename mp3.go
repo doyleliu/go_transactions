@@ -266,7 +266,8 @@ func handleFeedback(tcpConn *net.TCPConn){
 
 //to deal with the user's input and instructions
 func doTask() {
-	var currentTarget = ""// The target of last set
+	//var currentTarget = ""// The target of last set
+	var TargetQ []string
 	for {
 		var msg string
 
@@ -313,7 +314,8 @@ func doTask() {
 			//fmt.Println("conn", conn)
 			_, _ = conn.Write(b)
 			ClientSaveOP[target], _ = strconv.Atoi(val)
-			currentTarget = target
+			//currentTarget = target
+			TargetQ = append(TargetQ, target)
 
 		case "GET":
 			// get server.key
@@ -336,13 +338,16 @@ func doTask() {
 				continue
 			}
 			//fmt.Println("Current Target: ", currentTarget)
-			targetSplit := strings.Split(currentTarget, ".")
-			dest := targetSplit[0]
-			conn := CSConn[ServerName[dest]]
-			sendMsg := wrapMessage(msgSplit[0], currentTarget)
-			b := []byte(sendMsg)
-			conn.Write(b)
-
+			for len(TargetQ) > 0{
+				currentTarget := TargetQ[0]
+				TargetQ = TargetQ[1:]
+				targetSplit := strings.Split(currentTarget, ".")
+				dest := targetSplit[0]
+				conn := CSConn[ServerName[dest]]
+				sendMsg := wrapMessage(msgSplit[0], currentTarget)
+				b := []byte(sendMsg)
+				conn.Write(b)
+			}
 			//problems may happen here! To clear the temporary number
 			for k := range ClientSaveOP {
 				delete(ClientSaveOP, k)
@@ -353,13 +358,21 @@ func doTask() {
 			if ClientState != 1{
 				continue
 			}
-			targetSplit := strings.Split(currentTarget, ".")
-			dest := targetSplit[0]
-			conn := CSConn[ServerName[dest]]
-			sendMsg := wrapMessage(msgSplit[0], currentTarget)
-			//sendMsg := "ABORT"
-			b := []byte(sendMsg)
-			conn.Write(b)
+			for len(TargetQ) > 0{
+				currentTarget := TargetQ[0]
+				TargetQ = TargetQ[1:]
+				targetSplit := strings.Split(currentTarget, ".")
+				dest := targetSplit[0]
+				conn := CSConn[ServerName[dest]]
+				sendMsg := wrapMessage(msgSplit[0], currentTarget)
+				//sendMsg := "ABORT"
+				b := []byte(sendMsg)
+				conn.Write(b)
+			}
+
+			for k := range ClientSaveOP {
+				delete(ClientSaveOP, k)
+			}
 			ClientState = 0
 
 		}
@@ -422,10 +435,10 @@ func main() {
 		//Server["192.168.1.6"] = "NULL"
 		//ServerName["A"] = "192.168.1.6"
 
-		Server["192.168.1.6" + ":" + "9000"] = "NULL"
-		Server["192.168.1.6" + ":" + "9090"] = "NULL"
-		ServerName["A"] = "192.168.1.6:9000"
-		ServerName["B"] = "192.168.1.6:9090"
+		Server["10.195.3.50" + ":" + "9000"] = "NULL"
+		Server["10.195.3.50" + ":" + "9090"] = "NULL"
+		ServerName["A"] = "10.195.3.50:9000"
+		ServerName["B"] = "10.195.3.50:9090"
 		if mode == "server" {
 			serverCode(port, name)
 		} else {
