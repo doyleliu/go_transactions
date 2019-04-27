@@ -32,6 +32,8 @@ var CommitMap = make(map[string]int) // store the current unresponsive server
 
 var valMutex = sync.RWMutex{} //to lock the value when check and write
 
+var shouldGetWait = true//to lock the get operation
+
 var ClientState = 0 // The client state {0: Not in a transaction, 1: in the uncommited transaction, wait for commit or abort}
 
 var TargetQ []string // The queue that stores the destination of each set operation
@@ -217,7 +219,7 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 					//tcpConn.Write(b)
 				}
 				fmt.Println("Commit msg: ","COMMIT OK!" + ":" + name)
-				b := []byte("COMMIT OK!" + ":" + name)
+				b := []byte("COMMIT OK!" + ":" + name + ":")
 				tcpConn.Write(b)
 				//valMutex.Unlock()
 
@@ -267,7 +269,7 @@ func handleFeedback(tcpConn *net.TCPConn){
 		}
 		if err == nil{
 			recvMsg := string(buff[0:j])
-			//fmt.Println(recvMsg)
+			//fmt.Println("recvMsg",recvMsg)
 			msgSplit := strings.Split(recvMsg, ":")
 			if len(msgSplit) > 1 && msgSplit[1] == "GET"{
 				port := msgSplit[3]
@@ -291,10 +293,13 @@ func handleFeedback(tcpConn *net.TCPConn){
 						delete(ClientSaveOP, k)
 					}
 					ClientState = 0
+					shouldGetWait = false
 				}else{
 					fmt.Println(port + " = " + value)
+					shouldGetWait = false
 				}
 			}else{
+				//fmt.Println("recvMsg",recvMsg)
 				//fmt.Println("msgSplit[1]", msgSplit[1])
 				//fmt.Println("Current length:", len(CommitMap))
 				prevLen := len(CommitMap)
@@ -376,7 +381,15 @@ func doTask() {
 
 				sendMsg := wrapMessage(msgSplit[0], para )
 				b := []byte(sendMsg)
+				shouldGetWait = true
 				conn.Write(b)
+				//to wait until that get value has been updated
+				for{
+					if shouldGetWait == false{
+						break
+					}
+				}
+
 
 			}
 		case "COMMIT":
