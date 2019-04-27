@@ -15,8 +15,8 @@
       <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/mp3.go">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="377">
-              <caret line="312" column="19" selection-start-line="312" selection-start-column="19" selection-end-line="312" selection-end-column="19" />
+            <state relative-caret-position="554">
+              <caret line="187" column="60" lean-forward="true" selection-start-line="187" selection-start-column="60" selection-end-line="187" selection-end-column="60" />
               <folding>
                 <element signature="e#14#64#0" expanded="true" />
               </folding>
@@ -29,6 +29,8 @@
   <component name="FindInProjectRecents">
     <findStrings>
       <find>strconv</find>
+      <find>address</find>
+      <find>S</find>
     </findStrings>
   </component>
   <component name="GOROOT" path="/usr/local/Cellar/go/1.11.5/libexec" />
@@ -130,8 +132,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/mp3.go">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="377">
-          <caret line="312" column="19" selection-start-line="312" selection-start-column="19" selection-end-line="312" selection-end-column="19" />
+        <state relative-caret-position="554">
+          <caret line="187" column="60" lean-forward="true" selection-start-line="187" selection-start-column="60" selection-end-line="187" selection-end-column="60" />
           <folding>
             <element signature="e#14#64#0" expanded="true" />
           </folding>

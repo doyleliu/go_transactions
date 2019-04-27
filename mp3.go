@@ -36,7 +36,7 @@ var ClientState = 0 // The client state {0: Not in a transaction, 1: in the unco
 func setPort(addr []string, port string) string {
 	for a := range addr {
 		for s := range Server {
-			if addr[a] == s {
+			if (addr[a] + ":" + port) == s {
 				Server[s] = port
 				return s
 			}
@@ -110,7 +110,8 @@ func startServer(port string, name string) {
 		return
 	}
 
-	tcpAddr, _ := net.ResolveTCPAddr("tcp", index+":"+port)
+	//fmt.Println(index)
+	tcpAddr, _ := net.ResolveTCPAddr("tcp", index)
 	tcpListener, _ := net.ListenTCP("tcp", tcpAddr)
 	for {
 		tcpConn, err := tcpListener.AcceptTCP()
@@ -184,7 +185,7 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string) {
 
 			case "COMMIT":
 				valMutex.Lock()
-				fmt.Println("savedop length", len(SavedOp[clientName]))
+				fmt.Println("savedop:", SavedOp[clientName])
 				if _, ok := SavedOp[clientName]; ok{
 
 					instructionSplit := strings.Split(SavedOp[clientName], "+")
@@ -226,7 +227,11 @@ func startClient(port string, name string) {
 	fmt.Println("Server: ", len(Server))
 	for ADDR := range Server {
 		fmt.Println("Current Addr: " + ADDR)
-		tcpAddr, _ := net.ResolveTCPAddr("tcp", ADDR+":"+port)
+
+		//ADDRSplit := strings.Split(ADDR, ":")
+		//fmt.Println(ADDRSplit[0] + ":"+ port)
+		//tcpAddr, _ := net.ResolveTCPAddr("tcp", ADDR+":"+port)
+		tcpAddr, _ := net.ResolveTCPAddr("tcp", ADDR)
 		conn, err := net.DialTCP("tcp", nil, tcpAddr)
 		if err != nil {
 			fmt.Println("Server is not starting")
@@ -414,8 +419,13 @@ func main() {
 		mode := os.Args[1]
 		name := os.Args[2]
 		port := os.Args[3]
-		Server["192.168.1.6"] = "NULL"
-		ServerName["A"] = "192.168.1.6"
+		//Server["192.168.1.6"] = "NULL"
+		//ServerName["A"] = "192.168.1.6"
+
+		Server["192.168.1.6" + ":" + "9000"] = "NULL"
+		Server["192.168.1.6" + ":" + "9090"] = "NULL"
+		ServerName["A"] = "192.168.1.6:9000"
+		ServerName["B"] = "192.168.1.6:9090"
 		if mode == "server" {
 			serverCode(port, name)
 		} else {
