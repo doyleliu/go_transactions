@@ -174,7 +174,7 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 					tcpConn.Write(b)
 				}
 			case "SET":
-				valMutex.Lock()
+				//valMutex.Lock()
 				fmt.Println("I am here")
 				//target := msgSplit[1]
 				//val := msgSplit[2]
@@ -184,11 +184,11 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 				//fmt.Println("recvMsg[2] :", recvMsg[2])
 				//fmt.Println("recvMsg[2] Length :", len(recvMsg[2]))
 				SavedOp[clientName] += recvMsg[2] + "+"
-				valMutex.Unlock()
+				//valMutex.Unlock()
 
 
 			case "COMMIT":
-				valMutex.Lock()
+				//valMutex.Lock()
 				fmt.Println("savedop:", SavedOp[clientName])
 				if _, ok := SavedOp[clientName]; ok{
 
@@ -203,8 +203,9 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 
 						}
 					}
-					b := []byte("COMMIT OK!" + ":" + name)
-					tcpConn.Write(b)
+					//fmt.Println("Commit msg: ","COMMIT OK!" + ":" + name)
+					//b := []byte("COMMIT OK!" + ":" + name)
+					//tcpConn.Write(b)
 
 					//msgsplitC := strings.Fields(instruction)
 					////fmt.Println("msg split[0]: ", msgsplitC[0])
@@ -215,7 +216,10 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 					//b := []byte("COMMIT OK!")
 					//tcpConn.Write(b)
 				}
-				valMutex.Unlock()
+				fmt.Println("Commit msg: ","COMMIT OK!" + ":" + name)
+				b := []byte("COMMIT OK!" + ":" + name)
+				tcpConn.Write(b)
+				//valMutex.Unlock()
 
 			case "ABORT":
 				delete(SavedOp, clientName)
@@ -269,13 +273,33 @@ func handleFeedback(tcpConn *net.TCPConn){
 				port := msgSplit[3]
 				value := msgSplit[2]
 				if value == "NOT FOUND" {
+					// need to abort the transaction
 					fmt.Println(value)
+					for len(TargetQ) > 0{
+						currentTarget := TargetQ[0]
+						TargetQ = TargetQ[1:]
+						targetSplit := strings.Split(currentTarget, ".")
+						dest := targetSplit[0]
+						conn := CSConn[ServerName[dest]]
+						sendMsg := wrapMessage(msgSplit[0], currentTarget)
+						//sendMsg := "ABORT"
+						b := []byte(sendMsg)
+						conn.Write(b)
+					}
+
+					for k := range ClientSaveOP {
+						delete(ClientSaveOP, k)
+					}
+					ClientState = 0
 				}else{
 					fmt.Println(port + " = " + value)
 				}
 			}else{
+				//fmt.Println("msgSplit[1]", msgSplit[1])
+				//fmt.Println("Current length:", len(CommitMap))
+				prevLen := len(CommitMap)
 				delete(CommitMap, msgSplit[1])
-				if len(CommitMap) <= 0 {
+				if prevLen!= len(CommitMap) && len(CommitMap) <= 0 {
 					fmt.Println(msgSplit[0])
 				}
 
@@ -291,7 +315,6 @@ func doTask() {
 
 	for {
 		var msg string
-
 		in := bufio.NewReader(os.Stdin)
 		msg, err := in.ReadString('\n')
 
@@ -436,13 +459,7 @@ func dewrapMessage(msg string) []string{
 // }
 
 func serverCode(port string, name string) {
-	// remote server
-	// Server["172.22.158.185"] = "NULL"
-
-	// local server
-	// Server["10.195.3.50"] = "NULL"
 	startServer(port, name)
-
 }
 
 func main() {
