@@ -20,7 +20,9 @@ var Client = make(map[string]string) // key:"IP", value: "PORT"} to store the cu
 
 var StoredVal = make(map[string]int) // {key:"obeject", value: "value"} value stored in current server
 
-var SavedOp = make(map[string]string) // {key:"obeject", value: "value"} Uncommited transactions in current server
+var SavedAddr = make(map[string]string) // {key: "object", value: "map address"} to store different map address of each client
+
+//var SavedOp = make(map[string]string) // {key:"obeject", value: "value"} Uncommited transactions in current server
 
 var ClientSaveOP = make(map[string]int) //{key:"A.x", value: "value"} Uncommited
 
@@ -116,6 +118,9 @@ func startServer(port string, name string) {
 		}
 		strRemoteAddr := tcpConn.RemoteAddr().String()
 		fmt.Println("connecting with: " + strRemoteAddr)
+
+		// start to handle request together with uncommited operation map
+		var SavedOp := make(map[string]string)
 		go handleRequest(tcpConn)
 
 	}
