@@ -30,6 +30,8 @@ var CSConn = make(map[string]*net.TCPConn) // current client and server connecti
 
 var valMutex = sync.RWMutex{} //to lock the value when check and write
 
+var ClientState = 0 // The client state {0: Not in a transaction, 1: in the uncommited transaction, wait for commit or abort}
+
 
 func setPort(addr []string, port string) string {
 	for a := range addr {
@@ -61,32 +63,33 @@ func getIPAddr() []string {
 }
 
 // start the Coordinator
-//func startCoordinator(port string, name string){
-//	myAddr := getIPAddr()
-//	index := setPort(myAddr, port)
-//
-//	if index == "NULL" {
-//		fmt.Println(myAddr)
-//		fmt.Println("Cannot find address!")
-//		return
-//	}
-//	tcpAddr, _ := net.ResolveTCPAddr("tcp", index+":"+port)
-//	tcpListener, _ := net.ListenTCP("tcp", tcpAddr)
-//	for {
-//		tcpConn, err := tcpListener.AcceptTCP()
-//		defer tcpConn.Close()
-//		if err != nil {
-//			fmt.Println(err.Error())
-//			os.Exit(0)
-//		}
-//		strRemoteAddr := tcpConn.RemoteAddr().String()
-//		fmt.Println("connecting with: " + strRemoteAddr)
-//		go handleRequest(tcpConn)
-//
-//	}
-//
-//
-//}
+func startCoordinator(port string, name string){
+	myAddr := getIPAddr()
+	index := setPort(myAddr, port)
+
+	if index == "NULL" {
+		fmt.Println(myAddr)
+		fmt.Println("Cannot find address!")
+		return
+	}
+	tcpAddr, _ := net.ResolveTCPAddr("tcp", index+":"+port)
+	tcpListener, _ := net.ListenTCP("tcp", tcpAddr)
+	for {
+		tcpConn, err := tcpListener.AcceptTCP()
+		defer tcpConn.Close()
+		if err != nil {
+			fmt.Println(err.Error())
+			os.Exit(0)
+		}
+		strRemoteAddr := tcpConn.RemoteAddr().String()
+		fmt.Println("connecting with: " + strRemoteAddr)
+		var SavedOp = make(map[string]string)
+		go handleRequest(tcpConn, SavedOp)
+
+	}
+
+
+}
 
 func checkDeadlock(){
 
@@ -274,8 +277,21 @@ func doTask() {
 		//fmt.Println(msgSplit)
 		switch msgSplit[0] {
 		case "BEGIN\n":
+			if ClientState!= 0{
+				continue
+			}
 			fmt.Println("OK")
+			ClientState = 1
+		case "BEGIN":
+			if ClientState!= 0{
+				continue
+			}
+			fmt.Println("OK")
+			ClientState = 1
 		case "SET":
+			if ClientState != 1{
+				continue
+			}
 			// set server.key value
 			target := msgSplit[1]
 			targetSplit := strings.Split(target, ".")
@@ -311,6 +327,9 @@ func doTask() {
 
 			}
 		case "COMMIT":
+			if ClientState != 1{
+				continue
+			}
 			//fmt.Println("Current Target: ", currentTarget)
 			targetSplit := strings.Split(currentTarget, ".")
 			dest := targetSplit[0]
@@ -323,8 +342,12 @@ func doTask() {
 			for k := range ClientSaveOP {
 				delete(ClientSaveOP, k)
 			}
+			ClientState = 0
 
 		case "ABORT":
+			if ClientState != 1{
+				continue
+			}
 			targetSplit := strings.Split(currentTarget, ".")
 			dest := targetSplit[0]
 			conn := CSConn[ServerName[dest]]
@@ -332,6 +355,7 @@ func doTask() {
 			//sendMsg := "ABORT"
 			b := []byte(sendMsg)
 			conn.Write(b)
+			ClientState = 0
 
 		}
 		// fmt.Println(msg)
