@@ -36,6 +36,8 @@ var mutexMap = make(map[string]*sync.RWMutex) // the map contains current mutex 
 
 var shouldGetWait = true//to lock the get operation
 
+var shouldSetWait = true//to lock the set operation
+
 var ClientState = 0 // The client state {0: Not in a transaction, 1: in the uncommited transaction, wait for commit or abort}
 
 var TargetQ []string // The queue that stores the destination of each set operation
@@ -247,6 +249,7 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 //hanlde the operation of GET
 func handleGet(tcpConn *net.TCPConn, msgSplit []string, recvMsg []string, name string){
 	target := recvMsg[2] //
+
 	if val, ok := StoredVal[target]; ok {
 		//return the search results
 		retMsg := wrapMessage(msgSplit[0], strconv.Itoa(val) + ":" + name + "." + target)
@@ -273,11 +276,10 @@ func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string
 
 		fmt.Println("msgSplit[0]: ", msgSplit[0])
 		fmt.Println("Lock", mutexMap[msgSplit[0]])
-		fmt.Println("Current  msgSplit[0] length:", len(msgSplit[0]))
 		//test
-		if mutexMap["X"] == mutexMap[msgSplit[0]]{
-			fmt.Println("totally equal")
-		}
+		//if mutexMap["X"] == mutexMap[msgSplit[0]]{
+		//	fmt.Println("totally equal")
+		//}
 	}else {
 		msgSplit := strings.Fields(recvMsg[2])
 		var tmpMutex  = mutexMap[msgSplit[0]]
@@ -285,8 +287,9 @@ func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string
 		//fmt.Println("msgSplit[0]: ", msgSplit[0])
 		fmt.Println("Lock", tmpMutex)
 	}
-
-
+	retMsg := wrapMessage("SET", "SUCCESSFUL")
+	b := []byte(retMsg)
+	tcpConn.Write(b)
 
 	fmt.Println("I am here")
 
@@ -358,7 +361,10 @@ func handleFeedback(tcpConn *net.TCPConn){
 					fmt.Println(port + " = " + value)
 					shouldGetWait = false
 				}
-			}else{
+			}else if len(msgSplit) > 1 && msgSplit[1] == "SET"{
+				//fmt.Println("Successful Set", msgSplit[2])
+				shouldSetWait = false
+			} else{
 				//fmt.Println("recvMsg",recvMsg)
 				//fmt.Println("msgSplit[1]", msgSplit[1])
 				//fmt.Println("Current length:", len(CommitMap))
@@ -421,12 +427,19 @@ func doTask() {
 			b := []byte(sendMsg)
 			//fmt.Println("b val: ", b)
 			//fmt.Println("conn", conn)
+			shouldSetWait = true
 			_, _ = conn.Write(b)
 			ClientSaveOP[target], _ = strconv.Atoi(val)
 			//currentTarget = target
 			TargetQ = append(TargetQ, target)
 			//fmt.Println("target", target)
 			CommitMap[dest] = 1
+
+			for{
+				if shouldSetWait == false{
+					break
+				}
+			}
 
 		case "GET":
 			// get server.key
