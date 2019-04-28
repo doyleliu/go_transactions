@@ -32,6 +32,8 @@ var CommitMap = make(map[string]int) // store the current unresponsive server
 
 var valMutex = sync.RWMutex{} //to lock the value when check and write
 
+var mutexMap = make(map[string]*sync.RWMutex) // the map contains current mutex that the client holds
+
 var shouldGetWait = true//to lock the get operation
 
 var ClientState = 0 // The client state {0: Not in a transaction, 1: in the uncommited transaction, wait for commit or abort}
@@ -162,31 +164,34 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 
 			switch msgSplit[0]{
 			case "GET":
-
-				target := recvMsg[2] //
-				if val, ok := StoredVal[target]; ok {
-					//return the search results
-					retMsg := wrapMessage(msgSplit[0], strconv.Itoa(val) + ":" + name + "." + target)
-					b := []byte(retMsg)
-					tcpConn.Write(b)
-
-				}else{
-					retMsg := wrapMessage(msgSplit[0], "NOT FOUND" + ":" + name + "." + target)
-					b := []byte(retMsg)
-					tcpConn.Write(b)
-				}
-			case "SET":
-				//valMutex.Lock()
-				fmt.Println("I am here")
-				//target := msgSplit[1]
-				//val := msgSplit[2]
-				//if _, ok := StoredVal[target]; ok{
-				//	StoredVal[target] = strconv.Atoi(val)
+				go handleGet(tcpConn, msgSplit, recvMsg, name)
+				//target := recvMsg[2] //
+				//if val, ok := StoredVal[target]; ok {
+				//	//return the search results
+				//	retMsg := wrapMessage(msgSplit[0], strconv.Itoa(val) + ":" + name + "." + target)
+				//	b := []byte(retMsg)
+				//	tcpConn.Write(b)
+				//
+				//}else{
+				//	retMsg := wrapMessage(msgSplit[0], "NOT FOUND" + ":" + name + "." + target)
+				//	b := []byte(retMsg)
+				//	tcpConn.Write(b)
 				//}
-				//fmt.Println("recvMsg[2] :", recvMsg[2])
-				//fmt.Println("recvMsg[2] Length :", len(recvMsg[2]))
-				SavedOp[clientName] += recvMsg[2] + "+"
-				//valMutex.Unlock()
+			case "SET":
+				go handleSet(tcpConn, SavedOp, recvMsg, clientName)
+				//if _, ok := mutexMap[recvMsg[2]]; !ok{
+				//	var tmpMutex  = sync.RWMutex{}
+				//	mutexMap[recvMsg[2]] = tmpMutex
+				//	tmpMutex.Lock()
+				//}else {
+				//	var tmpMutex  = mutexMap[recvMsg[2]]
+				//	tmpMutex.Lock()
+				//}
+				//
+				////valMutex.Lock()
+				//fmt.Println("I am here")
+				//SavedOp[clientName] += recvMsg[2] + "+"
+				////valMutex.Unlock()
 
 
 			case "COMMIT":
@@ -201,7 +206,13 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 							target := msgsplitC[0]
 							val := msgsplitC[1]
 							StoredVal[target], _ = strconv.Atoi(val)
-							print("Current val:", StoredVal[target])
+							//fmt.Println("Current val:", StoredVal[target])
+							targetSplit := strings.Fields(target)
+							fmt.Println("Current target[0]:", targetSplit[0])
+							fmt.Println("Current target[0] length:", len(targetSplit[0]))
+							var tmpMutex  = mutexMap[targetSplit[0]]
+							fmt.Println("Mutex", tmpMutex)
+							(*tmpMutex).Unlock()
 
 						}
 					}
@@ -231,6 +242,55 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 			}
 		}
 	}
+}
+
+//hanlde the operation of GET
+func handleGet(tcpConn *net.TCPConn, msgSplit []string, recvMsg []string, name string){
+	target := recvMsg[2] //
+	if val, ok := StoredVal[target]; ok {
+		//return the search results
+		retMsg := wrapMessage(msgSplit[0], strconv.Itoa(val) + ":" + name + "." + target)
+		b := []byte(retMsg)
+		tcpConn.Write(b)
+
+	}else{
+		retMsg := wrapMessage(msgSplit[0], "NOT FOUND" + ":" + name + "." + target)
+		b := []byte(retMsg)
+		tcpConn.Write(b)
+	}
+}
+
+
+//handle the operation of SET
+func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string, clientName string){
+	msgSplit := strings.Fields(recvMsg[2])
+	if _, ok := mutexMap[msgSplit[0]]; !ok{
+		//var tmpMutex  = sync.RWMutex{}
+		mutexMap[msgSplit[0]] = &sync.RWMutex{}
+		var tmpMutex  = mutexMap[msgSplit[0]]
+		(*tmpMutex).Lock()
+
+
+		fmt.Println("msgSplit[0]: ", msgSplit[0])
+		fmt.Println("Lock", mutexMap[msgSplit[0]])
+		fmt.Println("Current  msgSplit[0] length:", len(msgSplit[0]))
+		//test
+		if mutexMap["X"] == mutexMap[msgSplit[0]]{
+			fmt.Println("totally equal")
+		}
+	}else {
+		msgSplit := strings.Fields(recvMsg[2])
+		var tmpMutex  = mutexMap[msgSplit[0]]
+		(*tmpMutex).Lock()
+		//fmt.Println("msgSplit[0]: ", msgSplit[0])
+		fmt.Println("Lock", tmpMutex)
+	}
+
+
+
+	fmt.Println("I am here")
+
+	SavedOp[clientName] += recvMsg[2] + "+"
 }
 
 func startClient(port string, name string) {

@@ -15,8 +15,8 @@
       <file pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/mp3.go">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="548">
-              <caret line="302" column="57" lean-forward="true" selection-start-line="301" selection-start-column="18" selection-end-line="302" selection-end-column="57" />
+            <state relative-caret-position="285">
+              <caret line="166" column="57" selection-start-line="166" selection-start-column="57" selection-end-line="166" selection-end-column="57" />
             </state>
           </provider>
         </entry>
@@ -28,6 +28,8 @@
       <find>strconv</find>
       <find>address</find>
       <find>S</find>
+      <find>CommitMap</find>
+      <find>lock</find>
     </findStrings>
   </component>
   <component name="GOROOT" path="/usr/local/Cellar/go/1.11.5/libexec" />
@@ -129,8 +131,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/mp3.go">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="548">
-          <caret line="302" column="57" lean-forward="true" selection-start-line="301" selection-start-column="18" selection-end-line="302" selection-end-column="57" />
+        <state relative-caret-position="285">
+          <caret line="166" column="57" selection-start-line="166" selection-start-column="57" selection-end-line="166" selection-end-column="57" />
         </state>
       </provider>
     </entry>
