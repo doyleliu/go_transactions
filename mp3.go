@@ -173,7 +173,7 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 
 			switch msgSplit[0]{
 			case "GET":
-				go handleGet(tcpConn, msgSplit, recvMsg, name)
+				go handleGet(tcpConn, msgSplit, recvMsg, name, checkLockStatus, SavedOp)
 
 			case "SET":
 				go handleSet(tcpConn, SavedOp, recvMsg, clientName, checkLockStatus)
@@ -202,7 +202,7 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 				//fmt.Println("Current target[0]:", targetSplit[0])
 				//fmt.Println("Current target[0] length:", len(targetSplit[0]))
 				var tmpMutex  = mutexMap[targetSplit[0]]
-				fmt.Println("Mutex", tmpMutex)
+				fmt.Println("Unlock Mutex", tmpMutex)
 				(*tmpMutex).Unlock()
 				delete(whoHoldsLock, target)
 
@@ -222,19 +222,39 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 }
 
 //hanlde the operation of GET
-func handleGet(tcpConn *net.TCPConn, msgSplit []string, recvMsg []string, name string){
+func handleGet(tcpConn *net.TCPConn, msgSplit []string, recvMsg []string, name string , checkLockStatus map[string]int,  SavedOp map[string]string){
 	target := recvMsg[2] //
 
 	if val, ok := StoredVal[target]; ok {
 		//return the search results
+		checkLockStatus[msgSplit[0]] = 1
+		mutexMap[msgSplit[0]] = &sync.RWMutex{}
+		var tmpMutex  = mutexMap[target]
+		(*tmpMutex).RLock()
+		delete(checkLockStatus,msgSplit[0])
 		retMsg := wrapMessage(msgSplit[0], strconv.Itoa(val) + ":" + name + "." + target)
 		b := []byte(retMsg)
 		tcpConn.Write(b)
+		(*tmpMutex).RUnlock()
+		delete(whoHoldsLock, target)
+
+	}else if val, ok := SavedOp[target];ok{
+		checkLockStatus[msgSplit[0]] = 1
+		var tmpMutex  = mutexMap[msgSplit[0]]
+		fmt.Println("Locked")
+		(*tmpMutex).RLock()
+		delete(checkLockStatus,msgSplit[0])
+		retMsg := wrapMessage(msgSplit[0], val + ":" + name + "." + target)
+		b := []byte(retMsg)
+		tcpConn.Write(b)
+		(*tmpMutex).RUnlock()
+		delete(whoHoldsLock, target)
 
 	}else{
 		retMsg := wrapMessage(msgSplit[0], "NOT FOUND" + ":" + name + "." + target)
 		b := []byte(retMsg)
 		tcpConn.Write(b)
+
 	}
 }
 
@@ -248,6 +268,7 @@ func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string
 		mutexMap[msgSplit[0]] = &sync.RWMutex{}
 		var tmpMutex  = mutexMap[msgSplit[0]]
 		(*tmpMutex).Lock()
+
 		delete(checkLockStatus,msgSplit[0])
 		whoHoldsLock[msgSplit[0]] = tcpConn
 		fmt.Println("clientName", clientName)
@@ -260,15 +281,18 @@ func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string
 		//}
 	}else {
 		msgSplit := strings.Fields(recvMsg[2])
-
+		//fmt.Println("tcpConn: ", tcpConn)
+		//fmt.Println("whoHoldsLock: ", whoHoldsLock)
 		if tcpConn == whoHoldsLock[msgSplit[0]]{
 			fmt.Println("Same holds the lock")
 		}else{
+			//fmt.Println("checkLockStatus", checkLockStatus)
 			checkLockStatus[msgSplit[0]] = 1
 			var tmpMutex  = mutexMap[msgSplit[0]]
 			fmt.Println("Locked")
 			(*tmpMutex).Lock()
 			delete(checkLockStatus,msgSplit[0])
+			whoHoldsLock[msgSplit[0]] = tcpConn
 		}
 
 		//fmt.Println("msgSplit[0]: ", msgSplit[0])
@@ -279,7 +303,7 @@ func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string
 	tcpConn.Write(b)
 
 	fmt.Println("recvMsg[2]: ", recvMsg[2])
-	fmt.Println("I am here, the SaveOp length", len(SavedOp))
+	//fmt.Println("I am here, the SaveOp length", len(SavedOp))
 
 	//SavedOp[clientName] += recvMsg[2] + "+"
 	SavedOp[msgSplit[0]] = msgSplit[1]
@@ -473,7 +497,7 @@ func doTask() {
 			//	conn.Write(b)
 			//}
 
-			fmt.Println("TargetLog length:",len(TargeLog))
+			//fmt.Println("TargetLog length:",len(TargeLog))
 			for k := range TargeLog{
 				currentTarget := k
 				delete(TargeLog, k)
@@ -577,11 +601,11 @@ func main() {
 		port := os.Args[3]
 
 		// hard-coded server address
-		//AAddr := "10.195.3.50"
-		AAddr := "192.168.1.6"
+		AAddr := "10.195.3.50"
+		//AAddr := "192.168.1.6"
 		APort := "9000"
-		//BAddr := "10.195.3.50"
-		BAddr := "192.168.1.6"
+		BAddr := "10.195.3.50"
+		//BAddr := "192.168.1.6"
 		BPort := "9090"
 		//CAddr := "10.195.3.50"
 		//CPort := "9100"
