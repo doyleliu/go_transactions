@@ -215,12 +215,15 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 				fmt.Println("whoHoldsLock: ",whoHoldsLock )
 				fmt.Println("mutexMap: ", mutexMap)
 
-				for k := range whoHoldsLock{
-					fmt.Println("key", k)
-					var tmpMutex  = mutexMap[k]
-					fmt.Println("Unlock Mutex", tmpMutex)
-					(*tmpMutex).Unlock()
-					delete(whoHoldsLock, k)
+				for k, v := range whoHoldsLock{
+					if v == tcpConn{
+						fmt.Println("key", k)
+						var tmpMutex  = mutexMap[k]
+						fmt.Println("Unlock Mutex", tmpMutex)
+						(*tmpMutex).Unlock()
+						delete(whoHoldsLock, k)
+					}
+
 				}
 
 				b := []byte("ABORTED!"+ ":" + name)
