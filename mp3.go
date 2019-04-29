@@ -34,6 +34,9 @@ var valMutex = sync.RWMutex{} //to lock the value when check and write
 
 var mutexMap = make(map[string]*sync.RWMutex) // the map contains current mutex that the client holds
 
+var whoHoldsLock = make(map[string]*net.TCPConn)
+
+
 var shouldGetWait = true//to lock the get operation
 
 var shouldSetWait = true//to lock the set operation
@@ -41,6 +44,8 @@ var shouldSetWait = true//to lock the set operation
 var ClientState = 0 // The client state {0: Not in a transaction, 1: in the uncommited transaction, wait for commit or abort}
 
 var TargetQ []string // The queue that stores the destination of each set operation
+
+var TargeLog = make(map[string]int)
 
 
 func setPort(addr []string, port string) string {
@@ -94,7 +99,8 @@ func startCoordinator(port string, name string){
 		strRemoteAddr := tcpConn.RemoteAddr().String()
 		fmt.Println("connecting with: " + strRemoteAddr)
 		var SavedOp = make(map[string]string)
-		go handleRequest(tcpConn, SavedOp, port, name)
+		var checkLockStatus = make(map[string]int) // check wether the lock has been hold now
+		go handleRequest(tcpConn, SavedOp, port, name, checkLockStatus)
 
 	}
 
@@ -135,14 +141,15 @@ func startServer(port string, name string) {
 
 		// start to handle request together with uncommited operation map
 		var SavedOp = make(map[string]string)
-		go handleRequest(tcpConn, SavedOp, port, name)
+		var checkLockStatus = make(map[string]int) // check wether the lock has been hold now
+		go handleRequest(tcpConn, SavedOp, port, name, checkLockStatus)
 
 	}
 
 }
 
 // handle the request from the client
-func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string, name string) {
+func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string, name string , checkLockStatus map[string]int) {
 	buff := make([]byte, 128)
 	for{
 		j, err := tcpConn.Read(buff)
@@ -167,74 +174,42 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 			switch msgSplit[0]{
 			case "GET":
 				go handleGet(tcpConn, msgSplit, recvMsg, name)
-				//target := recvMsg[2] //
-				//if val, ok := StoredVal[target]; ok {
-				//	//return the search results
-				//	retMsg := wrapMessage(msgSplit[0], strconv.Itoa(val) + ":" + name + "." + target)
-				//	b := []byte(retMsg)
-				//	tcpConn.Write(b)
-				//
-				//}else{
-				//	retMsg := wrapMessage(msgSplit[0], "NOT FOUND" + ":" + name + "." + target)
-				//	b := []byte(retMsg)
-				//	tcpConn.Write(b)
-				//}
+
 			case "SET":
-				go handleSet(tcpConn, SavedOp, recvMsg, clientName)
-				//if _, ok := mutexMap[recvMsg[2]]; !ok{
-				//	var tmpMutex  = sync.RWMutex{}
-				//	mutexMap[recvMsg[2]] = tmpMutex
-				//	tmpMutex.Lock()
-				//}else {
-				//	var tmpMutex  = mutexMap[recvMsg[2]]
-				//	tmpMutex.Lock()
-				//}
-				//
-				////valMutex.Lock()
-				//fmt.Println("I am here")
-				//SavedOp[clientName] += recvMsg[2] + "+"
-				////valMutex.Unlock()
+				go handleSet(tcpConn, SavedOp, recvMsg, clientName, checkLockStatus)
 
 
 			case "COMMIT":
-				//valMutex.Lock()
-				fmt.Println("savedop:", SavedOp[clientName])
-				if _, ok := SavedOp[clientName]; ok{
-
-					instructionSplit := strings.Split(SavedOp[clientName], "+")
-					for index := range instructionSplit{
-						msgsplitC := strings.Fields(instructionSplit[index])
-						if len(msgsplitC) > 1{
-							target := msgsplitC[0]
-							val := msgsplitC[1]
-							StoredVal[target], _ = strconv.Atoi(val)
-							//fmt.Println("Current val:", StoredVal[target])
-							targetSplit := strings.Fields(target)
-							fmt.Println("Current target[0]:", targetSplit[0])
-							fmt.Println("Current target[0] length:", len(targetSplit[0]))
-							var tmpMutex  = mutexMap[targetSplit[0]]
-							fmt.Println("Mutex", tmpMutex)
-							(*tmpMutex).Unlock()
-
-						}
+				//fmt.Println("recvMsg[2]", recvMsg[2])
+				for{
+					if len(checkLockStatus) <= 0{
+						break
 					}
-					//fmt.Println("Commit msg: ","COMMIT OK!" + ":" + name)
-					//b := []byte("COMMIT OK!" + ":" + name)
-					//tcpConn.Write(b)
-
-					//msgsplitC := strings.Fields(instruction)
-					////fmt.Println("msg split[0]: ", msgsplitC[0])
-					//target := msgsplitC[0]
-					//val := msgsplitC[1]
-					//StoredVal[target], _ = strconv.Atoi(val)
-					//print("Current val:", StoredVal[target])
-					//b := []byte("COMMIT OK!")
-					//tcpConn.Write(b)
 				}
+				recvMsgSplit := strings.Split(recvMsg[2],".")
+				fmt.Println("savedop:", SavedOp)
+				//fmt.Println("SavedOP length", len(SavedOp))
+				//fmt.Println("Mutex Length", len(mutexMap))
+				//for k, v := range SavedOp{
+				//fmt.Println("recvMsgSplit", recvMsgSplit)
+				target := recvMsgSplit[1]
+				val := SavedOp[target]
+				StoredVal[target], _ = strconv.Atoi(val)
+				//fmt.Println("Current val:", StoredVal[target])
+				targetSplit := strings.Fields(target)
+				//fmt.Println("Current target:", target)
+				//fmt.Println("Current value:", val)
+				//fmt.Println("Current target[0]:", targetSplit[0])
+				//fmt.Println("Current target[0] length:", len(targetSplit[0]))
+				var tmpMutex  = mutexMap[targetSplit[0]]
+				fmt.Println("Mutex", tmpMutex)
+				(*tmpMutex).Unlock()
+				delete(whoHoldsLock, target)
+
+				//}
 				fmt.Println("Commit msg: ","COMMIT OK!" + ":" + name)
 				b := []byte("COMMIT OK!" + ":" + name + ":")
 				tcpConn.Write(b)
-				//valMutex.Unlock()
 
 			case "ABORT":
 				delete(SavedOp, clientName)
@@ -265,14 +240,17 @@ func handleGet(tcpConn *net.TCPConn, msgSplit []string, recvMsg []string, name s
 
 
 //handle the operation of SET
-func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string, clientName string){
+func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string, clientName string, checkLockStatus map[string]int){
 	msgSplit := strings.Fields(recvMsg[2])
 	if _, ok := mutexMap[msgSplit[0]]; !ok{
 		//var tmpMutex  = sync.RWMutex{}
+		checkLockStatus[msgSplit[0]] = 1
 		mutexMap[msgSplit[0]] = &sync.RWMutex{}
 		var tmpMutex  = mutexMap[msgSplit[0]]
 		(*tmpMutex).Lock()
-
+		delete(checkLockStatus,msgSplit[0])
+		whoHoldsLock[msgSplit[0]] = tcpConn
+		fmt.Println("clientName", clientName)
 
 		fmt.Println("msgSplit[0]: ", msgSplit[0])
 		fmt.Println("Lock", mutexMap[msgSplit[0]])
@@ -282,18 +260,29 @@ func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string
 		//}
 	}else {
 		msgSplit := strings.Fields(recvMsg[2])
-		var tmpMutex  = mutexMap[msgSplit[0]]
-		(*tmpMutex).Lock()
+
+		if tcpConn == whoHoldsLock[msgSplit[0]]{
+			fmt.Println("Same holds the lock")
+		}else{
+			checkLockStatus[msgSplit[0]] = 1
+			var tmpMutex  = mutexMap[msgSplit[0]]
+			fmt.Println("Locked")
+			(*tmpMutex).Lock()
+			delete(checkLockStatus,msgSplit[0])
+		}
+
 		//fmt.Println("msgSplit[0]: ", msgSplit[0])
-		fmt.Println("Lock", tmpMutex)
+		//fmt.Println("Lock", tmpMutex)
 	}
 	retMsg := wrapMessage("SET", "SUCCESSFUL")
 	b := []byte(retMsg)
 	tcpConn.Write(b)
 
-	fmt.Println("I am here")
+	fmt.Println("recvMsg[2]: ", recvMsg[2])
+	fmt.Println("I am here, the SaveOp length", len(SavedOp))
 
-	SavedOp[clientName] += recvMsg[2] + "+"
+	//SavedOp[clientName] += recvMsg[2] + "+"
+	SavedOp[msgSplit[0]] = msgSplit[1]
 }
 
 func startClient(port string, name string) {
@@ -431,7 +420,10 @@ func doTask() {
 			_, _ = conn.Write(b)
 			ClientSaveOP[target], _ = strconv.Atoi(val)
 			//currentTarget = target
-			TargetQ = append(TargetQ, target)
+			//fmt.Println("target", target)
+			//TargetQ = append(TargetQ, target)
+			TargeLog[target] = 1
+
 			//fmt.Println("target", target)
 			CommitMap[dest] = 1
 
@@ -470,13 +462,25 @@ func doTask() {
 				continue
 			}
 			//fmt.Println("Current Target: ", currentTarget)
-			for len(TargetQ) > 0{
-				currentTarget := TargetQ[0]
-				TargetQ = TargetQ[1:]
+			//for len(TargeLog) > 0{
+			//	currentTarget := TargetQ[0]
+			//	TargetQ = TargetQ[1:]
+			//	targetSplit := strings.Split(currentTarget, ".")
+			//	dest := targetSplit[0]
+			//	conn := CSConn[ServerName[dest]]
+			//	sendMsg := wrapMessage(msgSplit[0], currentTarget + ".")
+			//	b := []byte(sendMsg)
+			//	conn.Write(b)
+			//}
+
+			fmt.Println("TargetLog length:",len(TargeLog))
+			for k := range TargeLog{
+				currentTarget := k
+				delete(TargeLog, k)
 				targetSplit := strings.Split(currentTarget, ".")
 				dest := targetSplit[0]
 				conn := CSConn[ServerName[dest]]
-				sendMsg := wrapMessage(msgSplit[0], currentTarget)
+				sendMsg := wrapMessage(msgSplit[0], currentTarget + ".")
 				b := []byte(sendMsg)
 				conn.Write(b)
 			}
@@ -490,9 +494,21 @@ func doTask() {
 			if ClientState != 1{
 				continue
 			}
-			for len(TargetQ) > 0{
-				currentTarget := TargetQ[0]
-				TargetQ = TargetQ[1:]
+			//for len(TargetQ) > 0{
+			//	currentTarget := TargetQ[0]
+			//	TargetQ = TargetQ[1:]
+			//	targetSplit := strings.Split(currentTarget, ".")
+			//	dest := targetSplit[0]
+			//	conn := CSConn[ServerName[dest]]
+			//	sendMsg := wrapMessage(msgSplit[0], currentTarget)
+			//	//sendMsg := "ABORT"
+			//	b := []byte(sendMsg)
+			//	conn.Write(b)
+			//}
+
+			for k := range TargeLog{
+				currentTarget := k
+				delete(TargeLog, k)
 				targetSplit := strings.Split(currentTarget, ".")
 				dest := targetSplit[0]
 				conn := CSConn[ServerName[dest]]
@@ -561,9 +577,11 @@ func main() {
 		port := os.Args[3]
 
 		// hard-coded server address
-		AAddr := "10.195.3.50"
+		//AAddr := "10.195.3.50"
+		AAddr := "192.168.1.6"
 		APort := "9000"
-		BAddr := "10.195.3.50"
+		//BAddr := "10.195.3.50"
+		BAddr := "192.168.1.6"
 		BPort := "9090"
 		//CAddr := "10.195.3.50"
 		//CPort := "9100"
