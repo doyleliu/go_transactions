@@ -212,9 +212,20 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 				tcpConn.Write(b)
 
 			case "ABORT":
-				delete(SavedOp, clientName)
+				fmt.Println("whoHoldsLock: ",whoHoldsLock )
+				fmt.Println("mutexMap: ", mutexMap)
+
+				for k := range whoHoldsLock{
+					fmt.Println("key", k)
+					var tmpMutex  = mutexMap[k]
+					fmt.Println("Unlock Mutex", tmpMutex)
+					(*tmpMutex).Unlock()
+					delete(whoHoldsLock, k)
+				}
+
 				b := []byte("ABORTED!"+ ":" + name)
 				tcpConn.Write(b)
+
 
 			}
 		}
@@ -379,6 +390,7 @@ func handleFeedback(tcpConn *net.TCPConn){
 			}else if len(msgSplit) > 1 && msgSplit[1] == "SET"{
 				//fmt.Println("Successful Set", msgSplit[2])
 				shouldSetWait = false
+				fmt.Println("OK")
 			} else{
 				//fmt.Println("recvMsg",recvMsg)
 				//fmt.Println("msgSplit[1]", msgSplit[1])
