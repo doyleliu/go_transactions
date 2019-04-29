@@ -225,14 +225,15 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 func handleGet(tcpConn *net.TCPConn, msgSplit []string, recvMsg []string, name string , checkLockStatus map[string]int,  SavedOp map[string]string){
 	target := recvMsg[2] //
 
-	if val, ok := StoredVal[target]; ok {
+	if _, ok := StoredVal[target]; ok {
 		//return the search results
 		checkLockStatus[msgSplit[0]] = 1
 		mutexMap[msgSplit[0]] = &sync.RWMutex{}
 		var tmpMutex  = mutexMap[target]
 		(*tmpMutex).RLock()
 		delete(checkLockStatus,msgSplit[0])
-		retMsg := wrapMessage(msgSplit[0], strconv.Itoa(val) + ":" + name + "." + target)
+		//whoHoldsLock[msgSplit[0]] = tcpConn
+		retMsg := wrapMessage(msgSplit[0], strconv.Itoa(StoredVal[target]) + ":" + name + "." + target)
 		b := []byte(retMsg)
 		tcpConn.Write(b)
 		(*tmpMutex).RUnlock()
@@ -244,6 +245,7 @@ func handleGet(tcpConn *net.TCPConn, msgSplit []string, recvMsg []string, name s
 		fmt.Println("Locked")
 		(*tmpMutex).RLock()
 		delete(checkLockStatus,msgSplit[0])
+		//whoHoldsLock[msgSplit[0]] = tcpConn
 		retMsg := wrapMessage(msgSplit[0], val + ":" + name + "." + target)
 		b := []byte(retMsg)
 		tcpConn.Write(b)
