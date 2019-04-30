@@ -47,10 +47,17 @@ var TargetQ []string // The queue that stores the destination of each set operat
 
 var TargeLog = make(map[string]int)
 
+//the next part are all about the coordinator
+
+var nodeMap = make(map[string]string) // the node connects to the next node
+
+
 //to log the coordinator address and port
-//var CoordAddr = "10.195.3.50"
-var CoordAddr = "192.168.1.6"
+var CoordAddr = "10.195.3.50"
+//var CoordAddr = "192.168.1.6"
 var CoordPort = "6060"
+
+var LOCALNAME = ""
 
 
 func setPort(addr []string, port string) string {
@@ -107,15 +114,80 @@ func startCoordinator(port string, name string){
 		fmt.Println("connecting with: " + strRemoteAddr)
 		//var SavedOp = make(map[string]string)
 		//var checkLockStatus = make(map[string]int) // check wether the lock has been hold now
-		//go handleRequest(tcpConn, SavedOp, port, name, checkLockStatus)
+		go handleDeadLock(tcpConn,  port, name)
 
 	}
 
 
 }
 
-func handleDeadLock(tcpConn *net.TCPConn, ResourceHoldBy map[string]string, port string, name string , checkLockStatus map[string]int){
+func handleDeadLock(tcpConn *net.TCPConn, port string, name string){
+	buff := make([]byte, 128)
+	for{
+		j, err := tcpConn.Read(buff)
+		if err != nil && err.Error() != "EOF" {
+			fmt.Println("Wrong to read the buffer ! ", err)
+			ch <- 1
+			break
 
+		}
+		if err == nil{
+			recvMsg := string(buff[0:j])
+			// show the current received message
+			fmt.Println(recvMsg)
+			recvMsgSplit := strings.Split(recvMsg, "\n")
+			recvLen := len(recvMsgSplit)
+			//fmt.Println("length: ", len(recvMsgSplit))
+			cnt := 0
+			for recvLen >= 2{
+				msgSplit := strings.Fields(recvMsgSplit[cnt])
+				OpName:= msgSplit[0]
+				fmt.Println("Opname: ", OpName)
+				nodeStart := msgSplit[1]
+				nodeEnd := msgSplit[2]
+
+				if OpName == "Hold"{
+					nodeMap[nodeStart] = nodeEnd
+				}else if OpName == "Release"{
+					delete(nodeMap, nodeStart)
+				}
+				recvLen -= 1
+				cnt += 1
+
+			}
+			fmt.Println("current nodeMap: ", nodeMap)
+
+			if checkDAG() == false{
+				fmt.Println("Deadlock detected!")
+			}
+
+		}
+	}
+}
+
+func checkDAG() bool{
+	for key := range nodeMap{
+		var visited = make(map[string]int)
+		for keyM:= range nodeMap{
+			visited[keyM] = 0
+		}
+		currentKey := key
+		for{
+			if visited[currentKey] == 1{
+				return false
+			}
+
+			visited[currentKey] = 1
+			if val, ok := nodeMap[currentKey]; ok{
+				currentKey = val
+			}else{
+				break
+			}
+
+		}
+	}
+
+	return true
 }
 
 // start the server
@@ -123,12 +195,12 @@ func startServer(port string, name string) {
 	// connect to the coordinator first
 	fmt.Println("Current Addr: " + CoordAddr + ":" + CoordPort)
 	tcpAddrC, _ := net.ResolveTCPAddr("tcp", CoordAddr + ":" + CoordPort)
-	conn, err := net.DialTCP("tcp", nil, tcpAddrC)
+	connC, err := net.DialTCP("tcp", nil, tcpAddrC)
 	if err != nil {
 		fmt.Println("Coordinator is not starting")
 		os.Exit(0)
 	}
-	CSConn[CoordAddr + ":" + CoordPort] = conn
+	CSConn[CoordAddr + ":" + CoordPort] = connC
 
 	myAddr := getIPAddr()
 	index := setPort(myAddr, port)
@@ -155,14 +227,14 @@ func startServer(port string, name string) {
 		// start to handle request together with uncommited operation map
 		var SavedOp = make(map[string]string)
 		var checkLockStatus = make(map[string]int) // check wether the lock has been hold now
-		go handleRequest(tcpConn, SavedOp, port, name, checkLockStatus)
+		go handleRequest(tcpConn, SavedOp, port, name, checkLockStatus, connC,strRemoteAddr)
 
 	}
 
 }
 
 // handle the request from the client
-func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string, name string , checkLockStatus map[string]int) {
+func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string, name string , checkLockStatus map[string]int, tcpConnC *net.TCPConn, clientName string) {
 	buff := make([]byte, 128)
 	for{
 		j, err := tcpConn.Read(buff)
@@ -178,7 +250,7 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 			recvMsg := dewrapMessage(string(buff[0:j]))
 			// show the current received message
 			fmt.Println(recvMsg)
-			clientName := recvMsg[0]
+			clientName = recvMsg[0]
 			clientInstruction := recvMsg[1]
 
 			msgSplit := strings.Split(clientInstruction, " ")
@@ -189,7 +261,7 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 				go handleGet(tcpConn, msgSplit, recvMsg, name, checkLockStatus, SavedOp)
 
 			case "SET":
-				go handleSet(tcpConn, SavedOp, recvMsg, clientName, checkLockStatus)
+				go handleSet(tcpConn, SavedOp, recvMsg, clientName, checkLockStatus , name, tcpConnC)
 
 
 			case "COMMIT":
@@ -216,6 +288,8 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 				//fmt.Println("Current target[0] length:", len(targetSplit[0]))
 				var tmpMutex  = mutexMap[targetSplit[0]]
 				fmt.Println("Unlock Mutex", tmpMutex)
+				bC := []byte("Release "+ name +"." +  targetSplit[0] + " " + clientName + "\n")
+				tcpConnC.Write(bC)
 				(*tmpMutex).Unlock()
 				delete(whoHoldsLock, target)
 
@@ -234,7 +308,10 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 						fmt.Println("key", k)
 						var tmpMutex  = mutexMap[k]
 						fmt.Println("Unlock Mutex", tmpMutex)
+						bC := []byte("Release "+ name +"." +  k + " " + clientName + "\n")
+						tcpConnC.Write(bC)
 						(*tmpMutex).Unlock()
+
 						delete(whoHoldsLock, k)
 					}
 
@@ -321,7 +398,7 @@ func handleGet(tcpConn *net.TCPConn, msgSplit []string, recvMsg []string, name s
 
 
 //handle the operation of SET
-func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string, clientName string, checkLockStatus map[string]int){
+func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string, clientName string, checkLockStatus map[string]int, name string, tcpConnC *net.TCPConn){
 	msgSplit := strings.Fields(recvMsg[2])
 	if _, ok := mutexMap[msgSplit[0]]; !ok{
 		//var tmpMutex  = sync.RWMutex{}
@@ -329,6 +406,11 @@ func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string
 		mutexMap[msgSplit[0]] = &sync.RWMutex{}
 		var tmpMutex  = mutexMap[msgSplit[0]]
 		(*tmpMutex).Lock()
+		//fmt.Println("name:", name)
+		//fmt.Println("recvMsg",   recvMsg)
+		//fmt.Println("Hold "+ name +"." +  msgSplit[0] + " " + clientName)
+		bC := []byte("Hold "+ name +"." +  msgSplit[0] + " " + clientName + "\n")
+		tcpConnC.Write(bC)
 
 		delete(checkLockStatus,msgSplit[0])
 		whoHoldsLock[msgSplit[0]] = tcpConn
@@ -336,10 +418,7 @@ func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string
 
 		fmt.Println("msgSplit[0]: ", msgSplit[0])
 		fmt.Println("Lock", mutexMap[msgSplit[0]])
-		//test
-		//if mutexMap["X"] == mutexMap[msgSplit[0]]{
-		//	fmt.Println("totally equal")
-		//}
+
 	}else {
 		msgSplit := strings.Fields(recvMsg[2])
 		//fmt.Println("tcpConn: ", tcpConn)
@@ -351,7 +430,13 @@ func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string
 			checkLockStatus[msgSplit[0]] = 1
 			var tmpMutex  = mutexMap[msgSplit[0]]
 			fmt.Println("Locked")
+			bC := []byte("Hold "+  clientName + " " + name +"." +  msgSplit[0]+ "\n")
+			tcpConnC.Write(bC)
 			(*tmpMutex).Lock()
+			bC = []byte("Release "+  clientName + " " + name +"." +  msgSplit[0]+ "\n")
+			tcpConnC.Write(bC)
+			bC = []byte("Hold "+  name +"." +  msgSplit[0] + " " + clientName + "\n")
+			tcpConnC.Write(bC)
 			delete(checkLockStatus,msgSplit[0])
 			whoHoldsLock[msgSplit[0]] = tcpConn
 		}
@@ -571,7 +656,7 @@ func doTask() {
 
 			//fmt.Println("TargetLog length:",len(TargeLog))
 			if len(TargeLog) == 0{
-				fmt.Println("COMMIT OK")
+				fmt.Println("COMMIT OK!")
 			}
 			for k := range TargeLog{
 				currentTarget := k
@@ -606,7 +691,7 @@ func doTask() {
 			//}
 
 			if len(TargeLog) == 0{
-				fmt.Println("ABORTED")
+				fmt.Println("ABORTED!")
 			}
 
 			for k := range TargeLog{
@@ -637,8 +722,8 @@ func doTask() {
 // to change the input message to the version that can be processed
 func wrapMessage(op string, msg string) string {
 	//msg (From) GET/SET/COMMIT/ABORT A.x (val)
-	myAddr := getIPAddr()
-	retMsg :=  myAddr[0] + ":" + op + ":" + msg
+	//myAddr := getIPAddr()
+	retMsg :=  LOCALNAME + ":" + op + ":" + msg
 	return retMsg
 }
 
@@ -680,11 +765,11 @@ func main() {
 		port := os.Args[3]
 
 		// hard-coded server address
-		//AAddr := "10.195.3.50"
-		AAddr := "192.168.1.6"
+		AAddr := "10.195.3.50"
+		//AAddr := "192.168.1.6"
 		APort := "9000"
-		//BAddr := "10.195.3.50"
-		BAddr := "192.168.1.6"
+		BAddr := "10.195.3.50"
+		//BAddr := "192.168.1.6"
 		BPort := "9090"
 		//CAddr := "10.195.3.50"
 		//CPort := "9100"
@@ -695,11 +780,18 @@ func main() {
 
 		Server[AAddr + ":" + APort] = "NULL"
 		Server[BAddr + ":" + BPort] = "NULL"
+		//Server[CAddr + ":" + CPort] = "NULL"
+		//Server[DAddr + ":" + DPort] = "NULL"
+		//Server[EAddr + ":" + EPort] = "NULL"
 		//Server[CoordAddr + ":" + CoordPort] = "NULL"
 
 		ServerName["A"] = AAddr + ":" + APort
 		ServerName["B"] = BAddr + ":" + BPort
+		//ServerName["C"] = CAddr + ":" + CPort
+		//ServerName["D"] = DAddr + ":" + DPort
+		//ServerName["E"] = EAddr + ":" + EPort
 		//ServerName["Coord"] = CoordAddr + ":" + CoordPort
+		LOCALNAME = name
 		if mode == "server" {
 			serverCode(port, name)
 		}else if mode == "coordinator"{
