@@ -47,6 +47,11 @@ var TargetQ []string // The queue that stores the destination of each set operat
 
 var TargeLog = make(map[string]int)
 
+//to log the coordinator address and port
+//var CoordAddr = "10.195.3.50"
+var CoordAddr = "192.168.1.6"
+var CoordPort = "6060"
+
 
 func setPort(addr []string, port string) string {
 	for a := range addr {
@@ -80,7 +85,9 @@ func getIPAddr() []string {
 // start the Coordinator
 func startCoordinator(port string, name string){
 	myAddr := getIPAddr()
-	index := setPort(myAddr, port)
+	fmt.Println("myAddr", myAddr)
+	fmt.Println("port", port)
+	index := CoordAddr
 
 	if index == "NULL" {
 		fmt.Println(myAddr)
@@ -98,26 +105,32 @@ func startCoordinator(port string, name string){
 		}
 		strRemoteAddr := tcpConn.RemoteAddr().String()
 		fmt.Println("connecting with: " + strRemoteAddr)
-		var SavedOp = make(map[string]string)
-		var checkLockStatus = make(map[string]int) // check wether the lock has been hold now
-		go handleRequest(tcpConn, SavedOp, port, name, checkLockStatus)
+		//var SavedOp = make(map[string]string)
+		//var checkLockStatus = make(map[string]int) // check wether the lock has been hold now
+		//go handleRequest(tcpConn, SavedOp, port, name, checkLockStatus)
 
 	}
 
 
 }
 
-func checkDeadlock(){
+func handleDeadLock(tcpConn *net.TCPConn, ResourceHoldBy map[string]string, port string, name string , checkLockStatus map[string]int){
 
 }
 
 // start the server
 func startServer(port string, name string) {
-	myAddr := getIPAddr()
-	// myPort := port
-	// myName := name
+	// connect to the coordinator first
+	fmt.Println("Current Addr: " + CoordAddr + ":" + CoordPort)
+	tcpAddrC, _ := net.ResolveTCPAddr("tcp", CoordAddr + ":" + CoordPort)
+	conn, err := net.DialTCP("tcp", nil, tcpAddrC)
+	if err != nil {
+		fmt.Println("Coordinator is not starting")
+		os.Exit(0)
+	}
+	CSConn[CoordAddr + ":" + CoordPort] = conn
 
-	// currentNodeIp := myAddr[0]
+	myAddr := getIPAddr()
 	index := setPort(myAddr, port)
 
 	if index == "NULL" {
@@ -214,6 +227,7 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 			case "ABORT":
 				fmt.Println("whoHoldsLock: ",whoHoldsLock )
 				fmt.Println("mutexMap: ", mutexMap)
+				fmt.Println("ABORT Savedop:", SavedOp)
 
 				for k, v := range whoHoldsLock{
 					if v == tcpConn{
@@ -225,7 +239,9 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 					}
 
 				}
-
+				for k := range SavedOp {
+					delete(SavedOp, k)
+				}
 				b := []byte("ABORTED!"+ ":" + name)
 				tcpConn.Write(b)
 
@@ -250,8 +266,9 @@ func handleGet(tcpConn *net.TCPConn, msgSplit []string, recvMsg []string, name s
 		retMsg := wrapMessage(msgSplit[0], strconv.Itoa(StoredVal[target]) + ":" + name + "." + target)
 		b := []byte(retMsg)
 		tcpConn.Write(b)
-		(*tmpMutex).RUnlock()
 		delete(whoHoldsLock, target)
+		(*tmpMutex).RUnlock()
+
 
 	}else if val, ok := SavedOp[target];ok{
 		checkLockStatus[msgSplit[0]] = 1
@@ -263,13 +280,41 @@ func handleGet(tcpConn *net.TCPConn, msgSplit []string, recvMsg []string, name s
 		retMsg := wrapMessage(msgSplit[0], val + ":" + name + "." + target)
 		b := []byte(retMsg)
 		tcpConn.Write(b)
-		(*tmpMutex).RUnlock()
 		delete(whoHoldsLock, target)
+		(*tmpMutex).RUnlock()
+
 
 	}else{
-		retMsg := wrapMessage(msgSplit[0], "NOT FOUND" + ":" + name + "." + target)
-		b := []byte(retMsg)
-		tcpConn.Write(b)
+		//fmt.Println("target", target)
+		checkLockStatus[target] = 1
+		var tmpMutex  = mutexMap[target]
+		fmt.Println("LockName", mutexMap[target])
+		fmt.Println("Locked")
+
+		if tmpMutex != nil {
+			fmt.Println("Here!")
+			(*tmpMutex).RLock()
+			delete(checkLockStatus, target)
+			if _,ok := StoredVal[target]; ok{
+				retMsg := wrapMessage(msgSplit[0], strconv.Itoa(StoredVal[target]) + ":" + name + "." + target)
+				b := []byte(retMsg)
+				tcpConn.Write(b)
+			}else{
+				retMsg := wrapMessage(msgSplit[0], "NOT FOUND" + ":" + name + "." + target)
+				b := []byte(retMsg)
+				tcpConn.Write(b)
+			}
+
+			delete(whoHoldsLock, target)
+			(*tmpMutex).RUnlock()
+		}else{
+			delete(checkLockStatus, target)
+			retMsg := wrapMessage(msgSplit[0], "NOT FOUND" + ":" + name + "." + target)
+			b := []byte(retMsg)
+			tcpConn.Write(b)
+		}
+
+
 
 	}
 }
@@ -326,6 +371,16 @@ func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string
 }
 
 func startClient(port string, name string) {
+	// connect to the coordinator first
+	fmt.Println("Current Addr: " + CoordAddr + ":" + CoordPort)
+	tcpAddr, _ := net.ResolveTCPAddr("tcp", CoordAddr + ":" + CoordPort)
+	conn, err := net.DialTCP("tcp", nil, tcpAddr)
+	if err != nil {
+		fmt.Println("Coordinator is not starting")
+		os.Exit(0)
+	}
+	CSConn[CoordAddr + ":" + CoordPort] = conn
+	// then connect to the server second
 	fmt.Println("Server: ", len(Server))
 	for ADDR := range Server {
 		fmt.Println("Current Addr: " + ADDR)
@@ -515,6 +570,9 @@ func doTask() {
 			//}
 
 			//fmt.Println("TargetLog length:",len(TargeLog))
+			if len(TargeLog) == 0{
+				fmt.Println("COMMIT OK")
+			}
 			for k := range TargeLog{
 				currentTarget := k
 				delete(TargeLog, k)
@@ -546,6 +604,10 @@ func doTask() {
 			//	b := []byte(sendMsg)
 			//	conn.Write(b)
 			//}
+
+			if len(TargeLog) == 0{
+				fmt.Println("ABORTED")
+			}
 
 			for k := range TargeLog{
 				currentTarget := k
@@ -618,11 +680,11 @@ func main() {
 		port := os.Args[3]
 
 		// hard-coded server address
-		AAddr := "10.195.3.50"
-		//AAddr := "192.168.1.6"
+		//AAddr := "10.195.3.50"
+		AAddr := "192.168.1.6"
 		APort := "9000"
-		BAddr := "10.195.3.50"
-		//BAddr := "192.168.1.6"
+		//BAddr := "10.195.3.50"
+		BAddr := "192.168.1.6"
 		BPort := "9090"
 		//CAddr := "10.195.3.50"
 		//CPort := "9100"
@@ -630,16 +692,18 @@ func main() {
 		//DPort := "9190"
 		//EAddr := "10.195.3.50"
 		//EPort := "9200"
-		//CoordAddr := "10.195.3.50"
-		//CoordPort := "9290"
-
 
 		Server[AAddr + ":" + APort] = "NULL"
 		Server[BAddr + ":" + BPort] = "NULL"
+		//Server[CoordAddr + ":" + CoordPort] = "NULL"
+
 		ServerName["A"] = AAddr + ":" + APort
 		ServerName["B"] = BAddr + ":" + BPort
+		//ServerName["Coord"] = CoordAddr + ":" + CoordPort
 		if mode == "server" {
 			serverCode(port, name)
+		}else if mode == "coordinator"{
+			startCoordinator(port, name)
 		} else {
 			startClient(port, name)
 		}
