@@ -441,7 +441,7 @@ func handleCommit(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []str
 
 
 		fmt.Println("Commit msg: ","COMMIT OK!" + ":" + targetSplit[0])
-		b := []byte("COMMIT OK!" + ":" + name + ":")
+		b := []byte("COMMIT OK" + ":" + name + ":")
 		tcpConn.Write(b)
 	}
 
@@ -913,7 +913,10 @@ func handleFeedback(tcpConn *net.TCPConn){
 			recvMsg := string(buff[0:j])
 			//fmt.Println("recvMsg",recvMsg)
 			msgSplit := strings.Split(recvMsg, ":")
-			if len(msgSplit) > 1 && msgSplit[1] == "GET"{
+			//if ClientState == 0 {
+			//	continue
+			//}
+			if len(msgSplit) > 1 && msgSplit[1] == "GET" && ClientState != 0{
 				port := msgSplit[3]
 				value := msgSplit[2]
 				if value == "NOT FOUND" {
@@ -941,7 +944,7 @@ func handleFeedback(tcpConn *net.TCPConn){
 					//shouldGetWait = false
 					ClientState = 1
 				}
-			}else if msgSplit[0] == "ABORTED"{
+			}else if msgSplit[0] == "ABORTED" && ClientState != 0{
 				//fmt.Println("here msg: ", msgSplit)
 				//forceAbort = true
 				//ClientState = 5
@@ -962,7 +965,7 @@ func handleFeedback(tcpConn *net.TCPConn){
 				}
 				fmt.Println("ABORTED")
 				ClientState = 0
-			} else if len(msgSplit) > 1 && msgSplit[1] == "SET"{
+			} else if len(msgSplit) > 1 && msgSplit[1] == "SET" && ClientState != 0{
 				//fmt.Println("Successful Set", msgSplit[2])
 				//shouldSetWait = false
 				fmt.Println("OK")
@@ -1056,7 +1059,7 @@ func doTask(){
 				continue
 			}
 			if len(TargeLog) == 0{
-				fmt.Println("COMMIT OK!")
+				fmt.Println("COMMIT OK")
 			}
 			//fmt.Println("TargetLog", TargeLog)
 			for k := range TargeLog{
@@ -1074,6 +1077,7 @@ func doTask(){
 			for k := range ClientSaveOP {
 				delete(ClientSaveOP, k)
 			}
+			//fmt.Println("COMMIT OK")
 			ClientState = 0
 		case "ABORT":
 			if ClientState == 0{
@@ -1124,7 +1128,7 @@ func doTask(){
 				conn := CSConn[ServerName[dest]]
 				sendMsg := wrapMessage(msgSplit[0], currentTarget)
 				//sendMsg := "ABORT"
-				fmt.Println("sendMsg:", sendMsg)
+				//fmt.Println("sendMsg:", sendMsg)
 				b := []byte(sendMsg)
 				conn.Write(b)
 			}
@@ -1134,31 +1138,32 @@ func doTask(){
 			}
 
 			ClientState = 0
+			//fmt.Println("ABORTED")
 
 			
 		}
-
-		if ClientState == 5 {
-			//forceAbort
-
-			for k := range TargeLog{
-				currentTarget := k
-				delete(TargeLog, k)
-				targetSplit := strings.Split(currentTarget, ".")
-				dest := targetSplit[0]
-				conn := CSConn[ServerName[dest]]
-				sendMsg := wrapMessage("ABORT", currentTarget)
-				//sendMsg := "ABORT"
-				b := []byte(sendMsg)
-				conn.Write(b)
-			}
-
-			for k := range ClientSaveOP {
-				delete(ClientSaveOP, k)
-			}
-
-			ClientState = 0
-		}
+		//
+		//if ClientState == 5 {
+		//	//forceAbort
+		//
+		//	for k := range TargeLog{
+		//		currentTarget := k
+		//		delete(TargeLog, k)
+		//		targetSplit := strings.Split(currentTarget, ".")
+		//		dest := targetSplit[0]
+		//		conn := CSConn[ServerName[dest]]
+		//		sendMsg := wrapMessage("ABORT", currentTarget)
+		//		//sendMsg := "ABORT"
+		//		b := []byte(sendMsg)
+		//		conn.Write(b)
+		//	}
+		//
+		//	for k := range ClientSaveOP {
+		//		delete(ClientSaveOP, k)
+		//	}
+		//
+		//	ClientState = 0
+		//}
 
 	}
 }
