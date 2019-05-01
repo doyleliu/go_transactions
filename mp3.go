@@ -56,7 +56,8 @@ var nodeMap = make(map[string]string) // the node connects to the next node
 
 
 //to log the coordinator address and port
-var CoordAddr = "10.195.3.50"
+var CoordAddr = "172.22.158.185"
+//var CoordAddr = "10.195.3.50"
 //var CoordAddr = "192.168.1.6"
 var CoordPort = "6060"
 
@@ -1466,31 +1467,38 @@ func main() {
 		port := os.Args[3]
 
 		// hard-coded server address
-		AAddr := "10.195.3.50"
+		AAddr := "172.22.158.185"
+		//AAddr := "10.195.3.50"
 		//AAddr := "192.168.1.6"
 		APort := "9000"
-		BAddr := "10.195.3.50"
+		BAddr := "172.22.156.186"
+		//BAddr := "10.195.3.50"
 		//BAddr := "192.168.1.6"
 		BPort := "9090"
+		CAddr := "172.22.158.186"
 		//CAddr := "10.195.3.50"
-		//CPort := "9100"
+		CPort := "9100"
+
+		DAddr := "172.22.94.196"
 		//DAddr := "10.195.3.50"
-		//DPort := "9190"
+		DPort := "9190"
+
+		EAddr :="172.22.156.187"
 		//EAddr := "10.195.3.50"
-		//EPort := "9200"
+		EPort := "9200"
 
 		Server[AAddr + ":" + APort] = "NULL"
 		Server[BAddr + ":" + BPort] = "NULL"
-		//Server[CAddr + ":" + CPort] = "NULL"
-		//Server[DAddr + ":" + DPort] = "NULL"
-		//Server[EAddr + ":" + EPort] = "NULL"
+		Server[CAddr + ":" + CPort] = "NULL"
+		Server[DAddr + ":" + DPort] = "NULL"
+		Server[EAddr + ":" + EPort] = "NULL"
 		//Server[CoordAddr + ":" + CoordPort] = "NULL"
 
 		ServerName["A"] = AAddr + ":" + APort
 		ServerName["B"] = BAddr + ":" + BPort
-		//ServerName["C"] = CAddr + ":" + CPort
-		//ServerName["D"] = DAddr + ":" + DPort
-		//ServerName["E"] = EAddr + ":" + EPort
+		ServerName["C"] = CAddr + ":" + CPort
+		ServerName["D"] = DAddr + ":" + DPort
+		ServerName["E"] = EAddr + ":" + EPort
 		//ServerName["Coord"] = CoordAddr + ":" + CoordPort
 		LOCALNAME = name
 		if mode == "server" {
