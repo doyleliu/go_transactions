@@ -56,8 +56,8 @@ var nodeMap = make(map[string]string) // the node connects to the next node
 
 
 //to log the coordinator address and port
-//var CoordAddr = "10.195.3.50"
-var CoordAddr = "192.168.1.6"
+var CoordAddr = "10.195.3.50"
+//var CoordAddr = "192.168.1.6"
 var CoordPort = "6060"
 
 var LOCALNAME = ""
@@ -294,6 +294,8 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 				fmt.Println("mutexMap: ", mutexMap)
 				fmt.Println("ABORT Savedop:", SavedOp)
 
+
+
 				for k, v := range whoHoldsLock{
 					if v == tcpConn{
 						fmt.Println("key", k)
@@ -351,6 +353,42 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 					tcpConnC.Write(bC)
 					delete(SavedOp, k)
 				}
+
+			case "ForceAbort":
+				fmt.Println("whoHoldsLock: ",whoHoldsLock )
+				fmt.Println("mutexMap: ", mutexMap)
+				fmt.Println("ABORT Savedop:", SavedOp)
+				bC := []byte("Release "+ recvMsg[0] + " " + recvMsg[2] + "\n")
+				tcpConnC.Write(bC)
+
+
+
+				for k, v := range whoHoldsLock{
+					if v == tcpConn{
+						fmt.Println("key", k)
+						var tmpMutex  = mutexMap[k]
+						fmt.Println("Unlock Mutex", tmpMutex)
+						bC := []byte("Release "+ name +"." +  k + " " + clientName + "\n")
+
+						tcpConnC.Write(bC)
+
+						if mutexLockStatus[k] == 1{
+							mutexLockStatus[k] = 0
+							(*tmpMutex).Unlock()
+						}
+
+
+						delete(whoHoldsLock, k)
+					}
+
+				}
+				for k := range SavedOp {
+					bC := []byte("Release "+ name +"." +  k + " " + clientName + "\n")
+					fmt.Println("here" + "Release "+ name +"." +  k + " " + clientName + "\n")
+					tcpConnC.Write(bC)
+					delete(SavedOp, k)
+				}
+
 
 			}
 		}
@@ -797,6 +835,70 @@ func startClient(port string, name string) {
 
 }
 
+//func handleFeedback(tcpConn *net.TCPConn){
+//	buff := make([]byte, 128)
+//	for{
+//		j, err := tcpConn.Read(buff)
+//		if err != nil && err.Error() != "EOF" {
+//			fmt.Println("Wrong to read the buffer ! ", err)
+//			ch <- 1
+//			break
+//
+//		}
+//		if err == nil{
+//			recvMsg := string(buff[0:j])
+//			//fmt.Println("recvMsg",recvMsg)
+//			msgSplit := strings.Split(recvMsg, ":")
+//			if len(msgSplit) > 1 && msgSplit[1] == "GET"{
+//				port := msgSplit[3]
+//				value := msgSplit[2]
+//				if value == "NOT FOUND" {
+//					// need to abort the transaction
+//					fmt.Println(value)
+//					for k := range TargeLog{
+//						currentTarget := k
+//						delete(TargeLog, k)
+//						targetSplit := strings.Split(currentTarget, ".")
+//						dest := targetSplit[0]
+//						conn := CSConn[ServerName[dest]]
+//						sendMsg := wrapMessage("ABORTGET", currentTarget)
+//						//sendMsg := "ABORT"
+//						b := []byte(sendMsg)
+//						conn.Write(b)
+//					}
+//
+//					for k := range ClientSaveOP {
+//						delete(ClientSaveOP, k)
+//					}
+//					ClientState = 0
+//					shouldGetWait = false
+//				}else{
+//					fmt.Println(port + " = " + value)
+//					shouldGetWait = false
+//				}
+//			}else if msgSplit[0] == "ABORTED"{
+//				//fmt.Println("here msg: ", msgSplit)
+//				forceAbort = true
+//			} else if len(msgSplit) > 1 && msgSplit[1] == "SET"{
+//				//fmt.Println("Successful Set", msgSplit[2])
+//				shouldSetWait = false
+//				fmt.Println("OK")
+//			} else{
+//				//fmt.Println("recvMsg",recvMsg)
+//				//fmt.Println("msgSplit[1]", msgSplit[1])
+//				//fmt.Println("Current length:", len(CommitMap))
+//				prevLen := len(CommitMap)
+//				delete(CommitMap, msgSplit[1])
+//				if prevLen!= len(CommitMap) && len(CommitMap) <= 0 {
+//					fmt.Println(msgSplit[0])
+//				}
+//
+//			}
+//
+//		}
+//	}
+//}
+
 func handleFeedback(tcpConn *net.TCPConn){
 	buff := make([]byte, 128)
 	for{
@@ -833,22 +935,40 @@ func handleFeedback(tcpConn *net.TCPConn){
 						delete(ClientSaveOP, k)
 					}
 					ClientState = 0
-					shouldGetWait = false
+					//shouldGetWait = false
 				}else{
 					fmt.Println(port + " = " + value)
-					shouldGetWait = false
+					//shouldGetWait = false
+					ClientState = 1
 				}
 			}else if msgSplit[0] == "ABORTED"{
 				//fmt.Println("here msg: ", msgSplit)
-				forceAbort = true
+				//forceAbort = true
+				//ClientState = 5
+				for k := range TargeLog{
+					currentTarget := k
+					delete(TargeLog, k)
+					targetSplit := strings.Split(currentTarget, ".")
+					dest := targetSplit[0]
+					conn := CSConn[ServerName[dest]]
+					sendMsg := wrapMessage("ABORTGET", currentTarget)
+					//sendMsg := "ABORT"
+					b := []byte(sendMsg)
+					conn.Write(b)
+				}
+
+				for k := range ClientSaveOP {
+					delete(ClientSaveOP, k)
+				}
+				fmt.Println("ABORTED")
+				ClientState = 0
 			} else if len(msgSplit) > 1 && msgSplit[1] == "SET"{
 				//fmt.Println("Successful Set", msgSplit[2])
-				shouldSetWait = false
+				//shouldSetWait = false
 				fmt.Println("OK")
+				ClientState = 1
 			} else{
-				//fmt.Println("recvMsg",recvMsg)
-				//fmt.Println("msgSplit[1]", msgSplit[1])
-				//fmt.Println("Current length:", len(CommitMap))
+
 				prevLen := len(CommitMap)
 				delete(CommitMap, msgSplit[1])
 				if prevLen!= len(CommitMap) && len(CommitMap) <= 0 {
@@ -862,8 +982,8 @@ func handleFeedback(tcpConn *net.TCPConn){
 }
 
 //to deal with the user's input and instructions
-func doTask() {
-	//var currentTarget = ""// The target of last set
+func doTask(){
+	CurrentGet := ""
 
 	for {
 		var msg string
@@ -874,16 +994,9 @@ func doTask() {
 			fmt.Println("Input reading error!")
 			os.Exit(0)
 		}
-
 		msgSplit := strings.Fields(msg)
-		//fmt.Println(msgSplit)
+
 		switch msgSplit[0] {
-		case "BEGIN\n":
-			if ClientState!= 0{
-				continue
-			}
-			fmt.Println("OK")
-			ClientState = 1
 		case "BEGIN":
 			if ClientState!= 0{
 				continue
@@ -918,37 +1031,8 @@ func doTask() {
 
 			//fmt.Println("target", target)
 			CommitMap[dest] = 1
-
-			for{
-				if shouldSetWait == false{
-					break
-				}
-				if forceAbort == true{
-					forceAbort = false
-					delete(ClientSaveOP, target)
-					for k := range TargeLog{
-						currentTarget := k
-						delete(TargeLog, k)
-						targetSplit := strings.Split(currentTarget, ".")
-						dest := targetSplit[0]
-						conn := CSConn[ServerName[dest]]
-						sendMsg := wrapMessage("ABORT", currentTarget)
-						//sendMsg := "ABORT"
-						b := []byte(sendMsg)
-						conn.Write(b)
-					}
-
-					for k := range ClientSaveOP {
-						delete(ClientSaveOP, k)
-					}
-
-					ClientState = 0
-					break
-				}
-			}
-
+			ClientState = 2 // Wait for response
 		case "GET":
-			// get server.key
 			target := msgSplit[1]
 			if val, ok := ClientSaveOP[target]; ok{
 				fmt.Println(target + " = " + strconv.Itoa(val))
@@ -963,53 +1047,14 @@ func doTask() {
 				shouldGetWait = true
 				conn.Write(b)
 				//to wait until that get value has been updated
-				for{
-					if shouldGetWait == false{
-						break
-					}
-					if forceAbort == true{
-						forceAbort = false
-						delete(ClientSaveOP, target)
-						for k := range TargeLog{
-							currentTarget := k
-							delete(TargeLog, k)
-							targetSplit := strings.Split(currentTarget, ".")
-							dest := targetSplit[0]
-							conn := CSConn[ServerName[dest]]
-							sendMsg := wrapMessage("ABORT", currentTarget)
-							//sendMsg := "ABORT"
-							b := []byte(sendMsg)
-							conn.Write(b)
-						}
-
-						for k := range ClientSaveOP {
-							delete(ClientSaveOP, k)
-						}
-
-						ClientState = 0
-						break
-					}
-				}
-
+				ClientState = 3
+				CurrentGet = dest + "." + para
 
 			}
 		case "COMMIT":
 			if ClientState != 1{
 				continue
 			}
-			//fmt.Println("Current Target: ", currentTarget)
-			//for len(TargeLog) > 0{
-			//	currentTarget := TargetQ[0]
-			//	TargetQ = TargetQ[1:]
-			//	targetSplit := strings.Split(currentTarget, ".")
-			//	dest := targetSplit[0]
-			//	conn := CSConn[ServerName[dest]]
-			//	sendMsg := wrapMessage(msgSplit[0], currentTarget + ".")
-			//	b := []byte(sendMsg)
-			//	conn.Write(b)
-			//}
-
-			//fmt.Println("TargetLog length:",len(TargeLog))
 			if len(TargeLog) == 0{
 				fmt.Println("COMMIT OK!")
 			}
@@ -1030,25 +1075,45 @@ func doTask() {
 				delete(ClientSaveOP, k)
 			}
 			ClientState = 0
-
 		case "ABORT":
-			if ClientState != 1{
+			if ClientState == 0{
 				continue
 			}
-			//for len(TargetQ) > 0{
-			//	currentTarget := TargetQ[0]
-			//	TargetQ = TargetQ[1:]
-			//	targetSplit := strings.Split(currentTarget, ".")
-			//	dest := targetSplit[0]
-			//	conn := CSConn[ServerName[dest]]
-			//	sendMsg := wrapMessage(msgSplit[0], currentTarget)
-			//	//sendMsg := "ABORT"
-			//	b := []byte(sendMsg)
-			//	conn.Write(b)
-			//}
+
+			if ClientState == 2 || ClientState ==3 {
+				if ClientState == 3{
+					CurrentGetSplit := strings.Split(CurrentGet, ".")
+					sendMsg := wrapMessage("ForceAbort", CurrentGet)
+					//sendMsg := "ABORT"
+					//fmt.Println("Current", CurrentGetSplit[0])
+					//fmt.Println("CSConn", CSConn)
+					conn := CSConn[ServerName[CurrentGetSplit[0]]]
+					b := []byte(sendMsg)
+					conn.Write(b)
+				}
+				for k := range TargeLog{
+					currentTarget := k
+					delete(TargeLog, k)
+					targetSplit := strings.Split(currentTarget, ".")
+					dest := targetSplit[0]
+					conn := CSConn[ServerName[dest]]
+					sendMsg := wrapMessage("ForceAbort", currentTarget)
+					//sendMsg := "ABORT"
+					b := []byte(sendMsg)
+					conn.Write(b)
+				}
+
+				for k := range ClientSaveOP {
+					delete(ClientSaveOP, k)
+				}
+
+				ClientState = 0
+				fmt.Println("ABORTED")
+				continue
+			}
 
 			if len(TargeLog) == 0{
-				fmt.Println("ABORTED!")
+				fmt.Println("ABORTED")
 			}
 
 			for k := range TargeLog{
@@ -1059,6 +1124,7 @@ func doTask() {
 				conn := CSConn[ServerName[dest]]
 				sendMsg := wrapMessage(msgSplit[0], currentTarget)
 				//sendMsg := "ABORT"
+				fmt.Println("sendMsg:", sendMsg)
 				b := []byte(sendMsg)
 				conn.Write(b)
 			}
@@ -1069,11 +1135,284 @@ func doTask() {
 
 			ClientState = 0
 
+			
 		}
-		// fmt.Println(msg)
+
+		if ClientState == 5 {
+			//forceAbort
+
+			for k := range TargeLog{
+				currentTarget := k
+				delete(TargeLog, k)
+				targetSplit := strings.Split(currentTarget, ".")
+				dest := targetSplit[0]
+				conn := CSConn[ServerName[dest]]
+				sendMsg := wrapMessage("ABORT", currentTarget)
+				//sendMsg := "ABORT"
+				b := []byte(sendMsg)
+				conn.Write(b)
+			}
+
+			for k := range ClientSaveOP {
+				delete(ClientSaveOP, k)
+			}
+
+			ClientState = 0
+		}
 
 	}
 }
+
+//func doTask() {
+//	//var currentTarget = ""// The target of last set
+//
+//	for {
+//		var msg string
+//		in := bufio.NewReader(os.Stdin)
+//		msg, err := in.ReadString('\n')
+//
+//		if err != nil {
+//			fmt.Println("Input reading error!")
+//			os.Exit(0)
+//		}
+//
+//		msgSplit := strings.Fields(msg)
+//		//fmt.Println(msgSplit)
+//		switch msgSplit[0] {
+//		case "BEGIN\n":
+//			if ClientState!= 0{
+//				continue
+//			}
+//			fmt.Println("OK")
+//			ClientState = 1
+//		case "BEGIN":
+//			if ClientState!= 0{
+//				continue
+//			}
+//			fmt.Println("OK")
+//			ClientState = 1
+//		case "SET":
+//			if ClientState != 1{
+//				continue
+//			}
+//			// set server.key value
+//			target := msgSplit[1]
+//			targetSplit := strings.Split(target, ".")
+//			dest := targetSplit[0]
+//			para := targetSplit[1]
+//			val := msgSplit[2]
+//			//fmt.Println("Server: ",CSConn[ServerName[dest]])
+//			conn := CSConn[ServerName[dest]]
+//
+//			sendMsg := wrapMessage(msgSplit[0], para + " " + val )
+//			//fmt.Println("sendMsg val:", sendMsg)
+//			b := []byte(sendMsg)
+//			//fmt.Println("b val: ", b)
+//			//fmt.Println("conn", conn)
+//			shouldSetWait = true
+//			_, _ = conn.Write(b)
+//			ClientSaveOP[target], _ = strconv.Atoi(val)
+//			//currentTarget = target
+//			//fmt.Println("target", target)
+//			//TargetQ = append(TargetQ, target)
+//			TargeLog[target] = 1
+//
+//			//fmt.Println("target", target)
+//			CommitMap[dest] = 1
+//
+//			//go handleSetWait()
+//
+//			for{
+//				if shouldSetWait == false{
+//					break
+//				}
+//				if forceAbort == true{
+//					forceAbort = false
+//					delete(ClientSaveOP, target)
+//					for k := range TargeLog{
+//						currentTarget := k
+//						delete(TargeLog, k)
+//						targetSplit := strings.Split(currentTarget, ".")
+//						dest := targetSplit[0]
+//						conn := CSConn[ServerName[dest]]
+//						sendMsg := wrapMessage("ABORT", currentTarget)
+//						//sendMsg := "ABORT"
+//						b := []byte(sendMsg)
+//						conn.Write(b)
+//					}
+//
+//					for k := range ClientSaveOP {
+//						delete(ClientSaveOP, k)
+//					}
+//
+//					ClientState = 0
+//					break
+//				}
+//			}
+//
+//		case "GET":
+//			// get server.key
+//			target := msgSplit[1]
+//			if val, ok := ClientSaveOP[target]; ok{
+//				fmt.Println(target + " = " + strconv.Itoa(val))
+//			}else {
+//				targetSplit := strings.Split(target, ".")
+//				dest := targetSplit[0]
+//				para := targetSplit[1]
+//				conn := CSConn[ServerName[dest]]
+//
+//				sendMsg := wrapMessage(msgSplit[0], para )
+//				b := []byte(sendMsg)
+//				shouldGetWait = true
+//				conn.Write(b)
+//				//to wait until that get value has been updated
+//				for{
+//					if shouldGetWait == false{
+//						break
+//					}
+//					if forceAbort == true{
+//						forceAbort = false
+//						delete(ClientSaveOP, target)
+//						for k := range TargeLog{
+//							currentTarget := k
+//							delete(TargeLog, k)
+//							targetSplit := strings.Split(currentTarget, ".")
+//							dest := targetSplit[0]
+//							conn := CSConn[ServerName[dest]]
+//							sendMsg := wrapMessage("ABORT", currentTarget)
+//							//sendMsg := "ABORT"
+//							b := []byte(sendMsg)
+//							conn.Write(b)
+//						}
+//
+//						for k := range ClientSaveOP {
+//							delete(ClientSaveOP, k)
+//						}
+//
+//						ClientState = 0
+//						break
+//					}
+//				}
+//
+//
+//			}
+//		case "COMMIT":
+//			if ClientState != 1{
+//				continue
+//			}
+//			//fmt.Println("Current Target: ", currentTarget)
+//			//for len(TargeLog) > 0{
+//			//	currentTarget := TargetQ[0]
+//			//	TargetQ = TargetQ[1:]
+//			//	targetSplit := strings.Split(currentTarget, ".")
+//			//	dest := targetSplit[0]
+//			//	conn := CSConn[ServerName[dest]]
+//			//	sendMsg := wrapMessage(msgSplit[0], currentTarget + ".")
+//			//	b := []byte(sendMsg)
+//			//	conn.Write(b)
+//			//}
+//
+//			//fmt.Println("TargetLog length:",len(TargeLog))
+//			if len(TargeLog) == 0{
+//				fmt.Println("COMMIT OK!")
+//			}
+//			//fmt.Println("TargetLog", TargeLog)
+//			for k := range TargeLog{
+//				currentTarget := k
+//				delete(TargeLog, k)
+//				targetSplit := strings.Split(currentTarget, ".")
+//				dest := targetSplit[0]
+//				conn := CSConn[ServerName[dest]]
+//				sendMsg := wrapMessage(msgSplit[0], currentTarget + ".")
+//				//fmt.Println("sendMsg:", sendMsg)
+//				b := []byte(sendMsg)
+//				conn.Write(b)
+//			}
+//			//problems may happen here! To clear the temporary number
+//			for k := range ClientSaveOP {
+//				delete(ClientSaveOP, k)
+//			}
+//			ClientState = 0
+//
+//		case "ABORT":
+//			if ClientState != 1{
+//				continue
+//			}
+//			//for len(TargetQ) > 0{
+//			//	currentTarget := TargetQ[0]
+//			//	TargetQ = TargetQ[1:]
+//			//	targetSplit := strings.Split(currentTarget, ".")
+//			//	dest := targetSplit[0]
+//			//	conn := CSConn[ServerName[dest]]
+//			//	sendMsg := wrapMessage(msgSplit[0], currentTarget)
+//			//	//sendMsg := "ABORT"
+//			//	b := []byte(sendMsg)
+//			//	conn.Write(b)
+//			//}
+//
+//			if len(TargeLog) == 0{
+//				fmt.Println("ABORTED!")
+//			}
+//
+//			for k := range TargeLog{
+//				currentTarget := k
+//				delete(TargeLog, k)
+//				targetSplit := strings.Split(currentTarget, ".")
+//				dest := targetSplit[0]
+//				conn := CSConn[ServerName[dest]]
+//				sendMsg := wrapMessage(msgSplit[0], currentTarget)
+//				//sendMsg := "ABORT"
+//				b := []byte(sendMsg)
+//				conn.Write(b)
+//			}
+//
+//			for k := range ClientSaveOP {
+//				delete(ClientSaveOP, k)
+//			}
+//
+//			ClientState = 0
+//
+//		}
+//		// fmt.Println(msg)
+//
+//	}
+//}
+
+//func handleSetWait(){
+//	for shouldSetWait == true{
+//		var msg string
+//		in := bufio.NewReader(os.Stdin)
+//		msg, err := in.ReadString('\n')
+//
+//		if err != nil {
+//			fmt.Println("Input reading error!")
+//			os.Exit(0)
+//		}
+//		fmt.Println("here msg", msg)
+//		msgSplit := strings.Fields(msg)
+//		if msgSplit[0] == "ABORT"{
+//			for k := range TargeLog{
+//				currentTarget := k
+//				delete(TargeLog, k)
+//				targetSplit := strings.Split(currentTarget, ".")
+//				dest := targetSplit[0]
+//				conn := CSConn[ServerName[dest]]
+//				sendMsg := wrapMessage("ABORT", currentTarget)
+//				//sendMsg := "ABORT"
+//				b := []byte(sendMsg)
+//				conn.Write(b)
+//			}
+//
+//			for k := range ClientSaveOP {
+//				delete(ClientSaveOP, k)
+//			}
+//
+//			ClientState = 0
+//			shouldSetWait = false
+//			break
+//		}
+//	}
+//}
 
 
 // to change the input message to the version that can be processed
@@ -1122,11 +1461,11 @@ func main() {
 		port := os.Args[3]
 
 		// hard-coded server address
-		//AAddr := "10.195.3.50"
-		AAddr := "192.168.1.6"
+		AAddr := "10.195.3.50"
+		//AAddr := "192.168.1.6"
 		APort := "9000"
-		//BAddr := "10.195.3.50"
-		BAddr := "192.168.1.6"
+		BAddr := "10.195.3.50"
+		//BAddr := "192.168.1.6"
 		BPort := "9090"
 		//CAddr := "10.195.3.50"
 		//CPort := "9100"
