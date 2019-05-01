@@ -56,8 +56,8 @@ var nodeMap = make(map[string]string) // the node connects to the next node
 
 
 //to log the coordinator address and port
-var CoordAddr = "10.195.3.50"
-//var CoordAddr = "192.168.1.6"
+//var CoordAddr = "10.195.3.50"
+var CoordAddr = "192.168.1.6"
 var CoordPort = "6060"
 
 var LOCALNAME = ""
@@ -142,6 +142,7 @@ func handleDeadLock(tcpConn *net.TCPConn, port string, name string){
 			recvLen := len(recvMsgSplit)
 			//fmt.Println("length: ", len(recvMsgSplit))
 			cnt := 0
+			checkR := false
 			for recvLen >= 2{
 				msgSplit := strings.Fields(recvMsgSplit[cnt])
 				OpName:= msgSplit[0]
@@ -151,6 +152,10 @@ func handleDeadLock(tcpConn *net.TCPConn, port string, name string){
 
 				if OpName == "Hold"{
 					nodeMap[nodeStart] = nodeEnd
+					if cnt == 0{
+						checkR = true
+					}
+
 				}else if OpName == "Release"{
 					delete(nodeMap, nodeStart)
 				}
@@ -160,15 +165,22 @@ func handleDeadLock(tcpConn *net.TCPConn, port string, name string){
 			}
 			fmt.Println("current nodeMap: ", nodeMap)
 
-			if checkDAG() == false{
-				fmt.Println("Deadlock Detected!")
-				b := []byte("Deadlock!")
-				tcpConn.Write(b)
-			}else{
-				fmt.Println("No Deadlock!")
-				b := []byte("OK!")
-				tcpConn.Write(b)
+			if checkR == true{
+				if checkDAG() == false{
+					fmt.Println("Deadlock Detected!")
+					b := []byte("Deadlock!")
+					tcpConn.Write(b)
+				}else{
+					fmt.Println("No Deadlock!")
+					b := []byte("OK!")
+					tcpConn.Write(b)
+				}
+
+			}else {
+				fmt.Println("No response")
 			}
+
+
 
 		}
 	}
@@ -321,6 +333,21 @@ func handleRequest(tcpConn *net.TCPConn, SavedOp map[string]string, port string,
 						bC := []byte("Release "+ name +"." +  k + " " + clientName + "\n")
 
 						tcpConnC.Write(bC)
+						//var buffC = make([]byte, 128)
+						//for{
+						//	j, err := tcpConnC.Read(buffC)
+						//	if err != nil && err.Error() != "EOF" {
+						//		fmt.Println("Wrong to read the buffer ! ", err)
+						//		ch <- 1
+						//		break
+						//
+						//	}
+						//	if err == nil{
+						//		recvMsgC := string(buffC[0:j])
+						//		fmt.Println("recvMsgC", recvMsgC)
+						//		break
+						//	}
+						//}
 						if mutexLockStatus[k] == 1{
 							mutexLockStatus[k] = 0
 							(*tmpMutex).Unlock()
@@ -362,6 +389,21 @@ func handleCommit(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []str
 		fmt.Println("Unlock Mutex", tmpMutex)
 		bC := []byte("Release "+ name +"." +  targetSplit[0] + " " + clientName + "\n")
 		tcpConnC.Write(bC)
+		//var buffC = make([]byte, 128)
+		//for{
+		//	j, err := tcpConnC.Read(buffC)
+		//	if err != nil && err.Error() != "EOF" {
+		//		fmt.Println("Wrong to read the buffer ! ", err)
+		//		ch <- 1
+		//		break
+		//
+		//	}
+		//	if err == nil{
+		//		recvMsgC := string(buffC[0:j])
+		//		fmt.Println("recvMsgC", recvMsgC)
+		//		break
+		//	}
+		//}
 		delete(SavedOp, target)
 		if mutexLockStatus[targetSplit[0]] == 1{
 			mutexLockStatus[targetSplit[0]] = 0
@@ -517,7 +559,7 @@ func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string
 					fmt.Println("recvMsgC", recvMsgC)
 					if recvMsgC == "Deadlock!"{
 						fmt.Println("here in deadlock ", whoHoldsLock)
-						bC := []byte("Release "+ name +"." +  msgSplit[0] + " " + clientName + "\n")
+						bC := []byte( "Release "+  clientName + " " + name +"." +  msgSplit[0]  + "\n")
 						tcpConnC.Write(bC)
 						//for k, v := range whoHoldsLock{
 						//	if v == tcpConn{
@@ -541,17 +583,63 @@ func handleSet(tcpConn *net.TCPConn, SavedOp map[string]string, recvMsg []string
 						tcpConn.Write(b)
 						return
 
-					} else if recvMsgC == "OK!"{
+					} else if recvMsgC == "OK!" || recvMsgC == "OK!OK!"{
 						break
 					}
 				}
 			}
 			(*tmpMutex).Lock()
 			mutexLockStatus[msgSplit[0]] = 1
-			bC = []byte("Release "+  clientName + " " + name +"." +  msgSplit[0]+ "\n")
+			//buffC = make([]byte, 128)
+			//for{
+			//	j, err := tcpConnC.Read(buffC)
+			//	if err != nil && err.Error() != "EOF" {
+			//		fmt.Println("Wrong to read the buffer ! ", err)
+			//		ch <- 1
+			//		break
+			//
+			//	}
+			//	if err == nil{
+			//		recvMsgC := string(buffC[0:j])
+			//		fmt.Println("recvMsgC", recvMsgC)
+			//		break
+			//	}
+			//}
+			bC = []byte("Release "+  clientName + " " + name +"." +  msgSplit[0]+ "\n" )
 			tcpConnC.Write(bC)
+			//buffC = make([]byte, 128)
+			//for{
+			//	j, err := tcpConnC.Read(buffC)
+			//	if err != nil && err.Error() != "EOF" {
+			//		fmt.Println("Wrong to read the buffer ! ", err)
+			//		ch <- 1
+			//		break
+			//
+			//	}
+			//	if err == nil{
+			//		recvMsgC := string(buffC[0:j])
+			//		fmt.Println("recvMsgC", recvMsgC)
+			//		break
+			//	}
+			//}
+
 			bC = []byte("Hold "+  name +"." +  msgSplit[0] + " " + clientName + "\n")
 			tcpConnC.Write(bC)
+			//buffC = make([]byte, 128)
+			//for{
+			//	j, err := tcpConnC.Read(buffC)
+			//	if err != nil && err.Error() != "EOF" {
+			//		fmt.Println("Wrong to read the buffer ! ", err)
+			//		ch <- 1
+			//		break
+			//
+			//	}
+			//	if err == nil{
+			//		recvMsgC := string(buffC[0:j])
+			//		fmt.Println("recvMsgC", recvMsgC)
+			//		break
+			//	}
+			//}
 			delete(checkLockStatus,msgSplit[0])
 			whoHoldsLock[msgSplit[0]] = tcpConn
 		}
@@ -908,11 +996,11 @@ func main() {
 		port := os.Args[3]
 
 		// hard-coded server address
-		AAddr := "10.195.3.50"
-		//AAddr := "192.168.1.6"
+		//AAddr := "10.195.3.50"
+		AAddr := "192.168.1.6"
 		APort := "9000"
-		BAddr := "10.195.3.50"
-		//BAddr := "192.168.1.6"
+		//BAddr := "10.195.3.50"
+		BAddr := "192.168.1.6"
 		BPort := "9090"
 		//CAddr := "10.195.3.50"
 		//CPort := "9100"
