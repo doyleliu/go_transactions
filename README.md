@@ -1,4 +1,5 @@
 # go_transactions
+This is a distributed transaction systems implemented with golang. Concurrency and isolation have been considered and I also implemented a deadlock detection in the system.
 ## Compile and Run Instruction:
 1. Run `cd go_transactions`.
 2. Firstly, start the coordinators. Run ` go run transaction.go coordinator Coord 6060`.
