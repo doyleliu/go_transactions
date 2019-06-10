@@ -1002,10 +1002,10 @@ func serverCode(port string, name string) {
 
 func main() {
 	if len(os.Args) < 3 {
-		fmt.Println("Usage: ./mp3 coordinator/server/client name port")
+		fmt.Println("Usage: ./transaction coordinator/server/client name port")
 		return
 	} else if len(os.Args) > 4 {
-		fmt.Println("Usage: ./mp3 coordinator/server/client name port")
+		fmt.Println("Usage: ./transaction coordinator/server/client name port")
 		return
 	} else {
 		mode := os.Args[1]
